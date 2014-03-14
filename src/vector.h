@@ -14,10 +14,11 @@ class vector
 		double z;
 };
 
-/*vector operator + (const vector&, const vector&);
+vector operator = (const vector&);
+vector operator + (const vector&, const vector&);
+vector operator * (const vector&, const vector&);
 vector operator - (const vector&, const vector&);
 vector operator += (const vector&);
-vector */
-
+vector operator -= (const vector&);
 
 #endif
