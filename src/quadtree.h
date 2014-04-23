@@ -4,6 +4,8 @@
 #include "vector.h"
 #include "particle.h"
 
+class particle;
+
 class quadtree
 {
 	public:
@@ -15,12 +17,15 @@ class quadtree
 		void allocate_child(int);
 		void print_info();
 		void print_info(int);
+		void update_mass();
+		double get_mass();
 	private:
 		quadtree* parent;
 		vector center;
 		unsigned long side;
 		quadtree *children[8];
 		particle* p;
+		double mass;
 };
 
 #endif

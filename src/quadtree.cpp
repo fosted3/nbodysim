@@ -60,7 +60,6 @@ void quadtree::allocate_child(int i)
 	{
 		z = 1;
 	}
-	std::cout << "x: " << x << " y: " << y << " z: " << z << " i: " << i << std::endl;
 	assert(this -> children[i] == NULL);
 	vector temp = this -> center;
 	temp += vector(x * half / 2, y * half / 2, z * half / 2);
@@ -103,4 +102,32 @@ void quadtree::print_info(int depth)
 
 void quadtree::add_particle(particle *par)
 {
+	if (this -> p == NULL)
+	{
+	}
+}
+
+double quadtree::get_mass()
+{
+	return this -> mass;
+}
+
+void quadtree::update_mass()
+{
+	if (this -> p == NULL)
+	{
+		this -> mass = 0;
+		for (int i = 0; i < 8; i++)
+		{
+			if (this -> children[i] != NULL)
+			{
+				this -> children[i] -> update_mass();
+				this -> mass += this -> children[i] -> get_mass();
+			}
+		}
+	}
+	else
+	{
+		this -> mass = this -> p -> get_mass();
+	}
 }
