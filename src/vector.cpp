@@ -29,7 +29,7 @@ void vector::print_inline()
 	std::cout << this -> x << ", " << this -> y << ", " << this -> z;
 }
 
-vector& vector::operator += (const vector& v)
+vector& vector::operator += (const vector &v)
 {
 	this -> x += v.x;
 	this -> y += v.y;
@@ -37,7 +37,7 @@ vector& vector::operator += (const vector& v)
 	return *this;
 }
 
-vector& vector::operator -= (const vector& v)
+vector& vector::operator -= (const vector &v)
 {
 	this -> x -= v.x;
 	this -> y -= v.y;
@@ -45,7 +45,23 @@ vector& vector::operator -= (const vector& v)
 	return *this;
 }
 
-vector& vector::operator = (const vector& v)
+vector& vector::operator *= (const double &a)
+{
+	this -> x *= a;
+	this -> y *= a;
+	this -> z *= a;
+	return *this;
+}
+
+vector& vector::operator /= (const double &a)
+{
+	this -> x /= a;
+	this -> y /= a;
+	this -> z /= a;
+	return *this;
+}
+
+vector& vector::operator = (const vector &v)
 {
 	this -> x = v.x;
 	this -> y = v.y;

@@ -11,7 +11,10 @@ class vector
 		void print_inline();
 		vector& operator += (const vector&);
 		vector& operator -= (const vector&);
-		vector& operator = (const vector&);		
+		vector& operator *= (const double&);
+		vector& operator /= (const double&);
+		vector& operator = (const vector&);	
+			
 	private:
 		double x;
 		double y;

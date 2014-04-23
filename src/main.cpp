@@ -1,7 +1,6 @@
 #include "vector.h"
 #include "particle.h"
 #include "quadtree.h"
-#include <cstddef>
 
 int main()
 {

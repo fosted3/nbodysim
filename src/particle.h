@@ -5,6 +5,7 @@ class particle
 {
 	public:
 		particle();
+		//particle(
 };
 
 #endif

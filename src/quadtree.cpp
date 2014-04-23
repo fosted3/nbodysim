@@ -7,7 +7,7 @@ quadtree::quadtree()
 {
 }
 
-quadtree::quadtree(vector* cen, unsigned long sid, quadtree* par)
+quadtree::quadtree(vector *cen, unsigned long sid, quadtree *par)
 {
 	assert(((sid % 2 == 0) || (sid == 1)) && sid > 0);
 	this -> center = *cen;
@@ -20,7 +20,7 @@ quadtree::quadtree(vector* cen, unsigned long sid, quadtree* par)
 	this -> p = NULL;
 }
 
-quadtree::quadtree(vector* cen, unsigned long sid)
+quadtree::quadtree(vector *cen, unsigned long sid)
 {
 	assert(((sid % 2 == 0) || (sid == 1)) && sid > 0);
 	this -> center = *cen;
@@ -99,4 +99,8 @@ void quadtree::print_info(int depth)
 			children[i] -> print_info(depth + 1);
 		}
 	}
+}
+
+void quadtree::add_particle(particle *par)
+{
 }

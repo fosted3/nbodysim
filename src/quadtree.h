@@ -11,6 +11,7 @@ class quadtree
 		quadtree(vector*, unsigned long, quadtree*); //center, side, parent
 		quadtree(vector*, unsigned long);
 		~quadtree();
+		void add_particle(particle*);
 		void allocate_child(int);
 		void print_info();
 		void print_info(int);
