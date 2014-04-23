@@ -13,8 +13,11 @@ class vector
 		vector& operator -= (const vector&);
 		vector& operator *= (const double&);
 		vector& operator /= (const double&);
-		vector& operator = (const vector&);	
-			
+		vector& operator = (const vector&);
+		//const double operator[] (const int); //this doesn't seem to work properly (fix), temporarily replaced with get_x...
+		const double get_x();
+		const double get_y();
+		const double get_z();
 	private:
 		double x;
 		double y;

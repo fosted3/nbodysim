@@ -68,3 +68,18 @@ vector& vector::operator = (const vector &v)
 	this -> z = v.z;
 	return *this;
 }
+
+const double vector::get_x()
+{
+	return this -> x;
+}
+
+const double vector::get_y()
+{
+	return this -> y;
+}
+
+const double vector::get_z()
+{
+	return this -> z;
+}

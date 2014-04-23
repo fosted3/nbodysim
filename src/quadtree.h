@@ -19,9 +19,13 @@ class quadtree
 		void print_info(int);
 		void update_mass();
 		double get_mass();
+		void calc_com();
+		vector* get_com();
+		bool clean();
 	private:
 		quadtree* parent;
 		vector center;
+		vector com;
 		unsigned long side;
 		quadtree *children[8];
 		particle* p;

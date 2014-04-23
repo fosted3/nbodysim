@@ -104,6 +104,47 @@ void quadtree::add_particle(particle *par)
 {
 	if (this -> p == NULL)
 	{
+		bool leaf = true;
+		for (int i = 0; i < 8; i++)
+		{
+			if (this -> children[i] != NULL)
+			{
+				leaf = false;
+				break;
+			}	
+		}
+		if (leaf)
+		{
+			this -> p = par;
+			par -> set_container(this);
+		}
+		else
+		{
+			int i = 0;
+			if (par -> get_pos() -> get_x() > this -> center.get_x())
+			{
+				i += 1;
+			}
+			if (par -> get_pos() -> get_y() > this -> center.get_y())
+			{
+				i += 2;
+			}
+			if (par -> get_pos() -> get_z() > this -> center.get_z())
+			{
+				i += 4;
+			}
+			if (this -> children[i] == NULL)
+			{
+				this -> allocate_child(i);
+			}
+			this -> children[i] -> add_particle(par);
+		}
+	}
+	else
+	{
+		/*particle* temp = this -> p;
+		this -> p = NULL;
+		this -*/
 	}
 }
 
@@ -130,4 +171,60 @@ void quadtree::update_mass()
 	{
 		this -> mass = this -> p -> get_mass();
 	}
+}
+
+void quadtree::calc_com()
+{
+	if (this -> p != NULL)
+	{
+		this -> com = *(this -> p -> get_pos());
+	}
+	else
+	{
+		vector temp = vector(0, 0, 0);
+		for (int i = 0; i < 8; i++)
+		{
+			if (this -> children[i] != NULL)
+			{
+				this -> children[i] -> calc_com();
+				vector temp2 = *(this -> children[i] -> get_com());
+				temp2 *= this -> children[i] -> get_mass();
+				temp += temp2;
+			}
+		}
+		temp /= this -> mass;
+		this -> com = temp;
+	}
+}
+
+vector* quadtree::get_com()
+{
+	return &(this -> com);
+}
+
+bool quadtree::clean()
+{
+	if (this -> p != NULL)
+	{
+		return false;
+	}
+	bool empty = true;
+	for (int i = 0; i < 8; i++)
+	{
+		if (this -> children[i] != NULL)
+		{
+			//empty = false;
+			if (this -> children[i] -> clean())
+			{
+				//std::cout << "Child at " << children[i] << " allocated but empty. Cleaning." << std::endl;
+				delete this -> children[i];
+				this -> children[i] = NULL;
+			}
+			else
+			{
+				empty = false;
+			}
+		}
+	}
+	return empty;
 }
