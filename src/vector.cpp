@@ -24,6 +24,11 @@ void vector::print()
 	std::cout << this -> x << ", " << this -> y << ", " << this -> z << std::endl;
 }
 
+void vector::print_inline()
+{
+	std::cout << this -> x << ", " << this -> y << ", " << this -> z;
+}
+
 vector& vector::operator += (const vector& v)
 {
 	this -> x += v.x;

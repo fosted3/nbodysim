@@ -9,12 +9,17 @@ class quadtree
 	public:
 		quadtree();
 		quadtree(vector*, unsigned long, quadtree*); //center, side, parent
+		quadtree(vector*, unsigned long);
+		~quadtree();
+		void allocate_child(int);
+		void print_info();
+		void print_info(int);
 	private:
 		quadtree* parent;
 		vector center;
 		unsigned long side;
-		quadtree** children;
-		//particle* p;
+		quadtree *children[8];
+		particle* p;
 };
 
 #endif

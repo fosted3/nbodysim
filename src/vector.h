@@ -8,6 +8,7 @@ class vector
 		vector(double, double, double);
 		~vector();
 		void print();
+		void print_inline();
 		vector& operator += (const vector&);
 		vector& operator -= (const vector&);
 		vector& operator = (const vector&);		
