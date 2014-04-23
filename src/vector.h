@@ -8,17 +8,13 @@ class vector
 		vector(double, double, double);
 		~vector();
 		void print();
+		vector& operator += (const vector&);
+		vector& operator -= (const vector&);
+		vector& operator = (const vector&);		
 	private:
 		double x;
 		double y;
 		double z;
 };
-
-vector operator = (const vector&);
-vector operator + (const vector&, const vector&);
-vector operator * (const vector&, const vector&);
-vector operator - (const vector&, const vector&);
-vector operator += (const vector&);
-vector operator -= (const vector&);
 
 #endif

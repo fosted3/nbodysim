@@ -1,12 +1,10 @@
 #include <iostream>
-#include "quadtree.h"
-#include "particle.h"
 #include "vector.h"
+#include "particle.h"
+#include "quadtree.h"
 
 int main()
 {
-	vector *a = new vector(1, 2, 3);
-	a -> print();
-	delete a;
+	
 	return 0;
 }

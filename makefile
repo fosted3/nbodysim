@@ -1,5 +1,5 @@
 CC=g++
-CFLAGS=-c -Wall
+CFLAGS=-c -Wall -g -O0
 LDFLAGS=
 EXECUTABLE=bin/nbodysim
 
