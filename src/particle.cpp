@@ -5,13 +5,13 @@ particle::particle()
 {
 }
 
-particle::particle(vector *pos, vector *vel, vector *acc, double mas, quadtree *con)
+particle::particle(vector *pos, vector *vel, vector *acc, double mas)
 {
 	this -> position = *pos;
 	this -> velocity = *vel;
 	this -> acceleration = *acc;
 	this -> mass = mas;
-	this -> container = con;
+	this -> container = NULL;
 }
 
 void particle::set_container(quadtree *con)

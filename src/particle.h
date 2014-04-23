@@ -10,7 +10,7 @@ class particle
 {
 	public:
 		particle();
-		particle(vector*, vector*, vector*, double, quadtree*);
+		particle(vector*, vector*, vector*, double);
 		void set_container(quadtree*);
 		double get_mass();
 		vector* get_pos();

@@ -1,4 +1,4 @@
-CC=clang++
+CC=g++
 CFLAGS=-c -Wall -g -O0
 LDFLAGS=
 EXECUTABLE=bin/nbodysim

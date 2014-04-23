@@ -1,15 +1,15 @@
 #include "quadtree.h"
-#include <cassert>
 #include <cstddef>
+#include <cassert>
 #include <iostream>
+#include <stdlib.h>
 
 quadtree::quadtree()
 {
 }
 
-quadtree::quadtree(vector *cen, unsigned long sid, quadtree *par)
+quadtree::quadtree(vector *cen, double sid, quadtree *par)
 {
-	assert(((sid % 2 == 0) || (sid == 1)) && sid > 0);
 	this -> center = *cen;
 	this -> side = sid;
 	this -> parent = par;
@@ -20,9 +20,8 @@ quadtree::quadtree(vector *cen, unsigned long sid, quadtree *par)
 	this -> p = NULL;
 }
 
-quadtree::quadtree(vector *cen, unsigned long sid)
+quadtree::quadtree(vector *cen, double sid)
 {
-	assert(((sid % 2 == 0) || (sid == 1)) && sid > 0);
 	this -> center = *cen;
 	this -> side = sid;
 	this -> parent = NULL;
@@ -47,7 +46,7 @@ void quadtree::allocate_child(int i)
 	int x = -1;
 	int y = -1;
 	int z = -1;
-	long half = (this -> side) / 2;
+	double half = (this -> side) / 2;
 	if (i & 1)
 	{
 		x = 1;
@@ -74,6 +73,10 @@ quadtree::~quadtree()
 		{
 			delete children[i];
 		}
+	}
+	if (this -> p != NULL)
+	{
+		delete p;
 	}
 }
 
@@ -102,6 +105,11 @@ void quadtree::print_info(int depth)
 
 void quadtree::add_particle(particle *par)
 {
+	if (!this -> inside(par))
+	{
+		assert(this -> parent != NULL);
+		this -> parent -> add_particle(par);
+	}
 	if (this -> p == NULL)
 	{
 		bool leaf = true;
@@ -142,9 +150,26 @@ void quadtree::add_particle(particle *par)
 	}
 	else
 	{
-		/*particle* temp = this -> p;
+		int i = 0;
+		if (this -> p -> get_pos() -> get_x() > this -> center.get_x())
+		{
+			i += 1;
+		}
+		if (this -> p -> get_pos() -> get_y() > this -> center.get_y())
+		{
+			i += 2;
+		}
+		if (this -> p -> get_pos() -> get_z() > this -> center.get_z())
+		{
+			i += 4;
+		}
+		if (this -> children[i] == NULL)
+		{
+			this -> allocate_child(i);
+		}
+		this -> children[i] -> add_particle(this -> p);
 		this -> p = NULL;
-		this -*/
+		this -> add_particle(par);
 	}
 }
 
@@ -213,10 +238,9 @@ bool quadtree::clean()
 	{
 		if (this -> children[i] != NULL)
 		{
-			//empty = false;
 			if (this -> children[i] -> clean())
 			{
-				//std::cout << "Child at " << children[i] << " allocated but empty. Cleaning." << std::endl;
+				std::cout << "Child at " << children[i] << " allocated but empty. Cleaning." << std::endl;
 				delete this -> children[i];
 				this -> children[i] = NULL;
 			}
@@ -227,4 +251,22 @@ bool quadtree::clean()
 		}
 	}
 	return empty;
+}
+
+bool quadtree::inside(particle* par)
+{
+	vector *temp = par -> get_pos();
+	if (abs(temp -> get_x() - this -> center.get_x()) > (this -> side) / 2)
+	{
+		return false;
+	}
+	if (abs(temp -> get_y() - this -> center.get_y()) > (this -> side) / 2)
+	{
+		return false;
+	}
+	if (abs(temp -> get_z() - this -> center.get_z()) > (this -> side) / 2)
+	{
+		return false;
+	}
+	return true;
 }
