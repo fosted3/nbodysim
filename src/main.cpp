@@ -185,6 +185,7 @@ void dump(unsigned int frame, std::vector<particle*> &particles)
 		filename.insert(0, "0");
 	}
 	filename += ".dat";
+	filename.insert(0, "./data/");
 	std::fstream outfile(filename, std::ios::out | std::ios::binary);
 	outfile.seekp(0);
 	for (unsigned int i = 0; i < particles.size(); i++)
@@ -194,13 +195,24 @@ void dump(unsigned int frame, std::vector<particle*> &particles)
 	outfile.close();
 }
 
-void print_particles(std::vector<particle*> &particles)
+void dump_plaintext(unsigned int frame, std::vector<particle*> &particles)
 {
-	std::cout << "~" << std::endl;
+	std::string filename = std::to_string(frame);
+	vector temp;
+	while (filename.length() < 4)
+	{
+		filename.insert(0, "0");
+	}
+	filename += ".txt";
+	filename.insert(0, "./data/");
+	std::fstream outfile(filename, std::ios::out);
+	outfile.seekp(0);
 	for (unsigned int i = 0; i < particles.size(); i++)
 	{
-		particles[i] -> print_compact();
+		temp = *(particles[i] -> get_pos());
+		outfile << temp.get_x() << ", " << temp.get_y() << ", " << temp.get_z() << "\n";
 	}
+	outfile.close();
 }
 
 int main()
@@ -256,7 +268,8 @@ int main()
 		check_tree(particles);
 		root -> clean();
 		root -> remove_redundancy();
-		dump(i, particles);
+		//dump(i, particles);
+		dump_plaintext(i, particles);
 	}
 	delete root;
 	pthread_exit(NULL);

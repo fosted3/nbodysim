@@ -19,7 +19,6 @@ class particle
 		void update(double dt);
 		void print(void);
 		quadtree* get_container(void);
-		void print_compact(void);
 	private:
 		vector position;
 		vector velocity;
