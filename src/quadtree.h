@@ -13,16 +13,18 @@ class quadtree
 		quadtree(vector*, double, quadtree*); //center, side, parent
 		quadtree(vector*, double);
 		~quadtree();
-		void add_particle(particle*);
+		bool add_particle(particle*);
 		void allocate_child(int);
 		void print_info();
 		void print_info(int);
-		void update_mass();
+		void calc_mass();
 		double get_mass();
 		void calc_com();
 		vector* get_com();
 		bool clean();
 		bool inside(particle*);
+		void release_particle();
+		quadtree* get_parent();
 	private:
 		quadtree* parent;
 		vector center;

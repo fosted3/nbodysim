@@ -59,3 +59,8 @@ void particle::print()
 	std::cout << ", acc: ";
 	this -> acceleration.print();
 }
+
+quadtree* particle::get_container()
+{
+	return this -> container;
+}

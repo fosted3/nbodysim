@@ -18,6 +18,7 @@ class particle
 		void set_acc_offset(vector*);
 		void update(double dt);
 		void print();
+		quadtree* get_container();
 	private:
 		vector position;
 		vector velocity;
