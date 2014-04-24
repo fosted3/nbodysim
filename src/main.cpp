@@ -12,6 +12,7 @@
 #include <fstream>
 
 #ifdef THREADED
+
 #define NUM_THREADS 4
 #include <pthread.h>
 
@@ -191,6 +192,15 @@ void dump(unsigned int frame, std::vector<particle*> &particles)
 		outfile.write((char*)particles[i], size);
 	}
 	outfile.close();
+}
+
+void print_particles(std::vector<particle*> &particles)
+{
+	std::cout << "~" << std::endl;
+	for (unsigned int i = 0; i < particles.size(); i++)
+	{
+		particles[i] -> print_compact();
+	}
 }
 
 int main()

@@ -60,6 +60,15 @@ void particle::print(void)
 	this -> acceleration.print();
 }
 
+void particle::print_compact(void)
+{
+	this -> position.print_inline();
+	std::cout << ", ";
+	this -> velocity.print_inline();
+	std::cout << ", ";
+	this -> acceleration.print();
+}
+
 quadtree* particle::get_container(void)
 {
 	return this -> container;
