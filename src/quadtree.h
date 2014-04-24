@@ -25,6 +25,9 @@ class quadtree
 		bool inside(particle*);
 		void release_particle();
 		quadtree* get_parent();
+		double get_side();
+		quadtree* get_child(int);
+		particle* get_particle();
 	private:
 		quadtree* parent;
 		vector center;

@@ -18,10 +18,14 @@ class vector
 		const double get_x();
 		const double get_y();
 		const double get_z();
+		const double magnitude();
+		void normalize();
 	private:
 		double x;
 		double y;
 		double z;
 };
+
+const double distance(vector*, vector*);
 
 #endif

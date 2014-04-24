@@ -191,7 +191,7 @@ double quadtree::get_mass()
 	return this -> mass;
 }
 
-void quadtree::calc_mass()
+void quadtree::calc_mass() //call on root
 {
 	if (this -> p == NULL)
 	{
@@ -211,7 +211,7 @@ void quadtree::calc_mass()
 	}
 }
 
-void quadtree::calc_com()
+void quadtree::calc_com() //call on root
 {
 	if (this -> p != NULL)
 	{
@@ -293,4 +293,19 @@ void quadtree::release_particle()
 quadtree* quadtree::get_parent()
 {
 	return this -> parent;
+}
+
+double quadtree::get_side()
+{
+	return this -> side;
+}
+
+quadtree* quadtree::get_child(int i)
+{
+	return (this -> children[i]);
+}
+
+particle* quadtree::get_particle()
+{
+	return this -> p;
 }

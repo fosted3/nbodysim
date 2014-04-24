@@ -1,4 +1,5 @@
 #include "vector.h"
+#include <math.h>
 #include <iostream>
 
 vector::vector()
@@ -82,4 +83,22 @@ const double vector::get_y()
 const double vector::get_z()
 {
 	return this -> z;
+}
+
+const double distance(vector *a, vector *b)
+{
+	return sqrt(pow(a -> get_x() - b -> get_x(), 2) + pow(a -> get_y() - b -> get_y(), 2) + pow(a -> get_z() - b -> get_z(), 2));
+}
+
+const double vector::magnitude()
+{
+	return sqrt(pow(this -> x, 2) + pow(this -> y, 2) + pow(this -> z, 2));
+}
+
+void vector::normalize()
+{
+	double mag = this -> magnitude();
+	this -> x /= mag;
+	this -> y /= mag;
+	this -> z /= mag;
 }
