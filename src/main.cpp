@@ -147,7 +147,7 @@ int main()
 	particles.push_back(n);
 	particles.push_back(o);
 	particles.push_back(p);
-	for (int i = 0; i < 50; i++)
+	for (int i = 0; i < 2; i++)
 	{
 		root -> print_info(0);
 		root -> calc_mass();
@@ -156,6 +156,7 @@ int main()
 		update_all(particles, 1);
 		check_tree(particles, root);
 		root -> clean();
+		root -> remove_redundancy();
 	}
 	delete root;
 	return 0;

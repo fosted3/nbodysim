@@ -28,6 +28,7 @@ class quadtree
 		double get_side();
 		quadtree* get_child(int);
 		particle* get_particle();
+		void remove_redundancy();
 	private:
 		quadtree* parent;
 		vector center;

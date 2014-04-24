@@ -309,3 +309,51 @@ particle* quadtree::get_particle()
 {
 	return this -> p;
 }
+
+void quadtree::remove_redundancy()
+{
+	if (this -> p != NULL)
+	{
+		return;
+	}
+	bool single_node_particle = false;
+	int first_index = -1;
+	int last_index = -1;
+	for (int i = 0; i < 8; i++)
+	{
+		if (this -> children[i] != NULL)
+		{
+			if (single_node_particle == false)
+			{
+				first_index = i;
+				single_node_particle = true;
+			}
+			else
+			{
+				single_node_particle = false;
+				break;
+			}
+			if (this -> children[i] -> get_particle() != NULL)
+			{
+				last_index = i;
+			}
+		}
+	}
+	if (single_node_particle && last_index != -1)
+	{
+		particle *temp = this -> children[last_index] -> get_particle();
+		this -> children[last_index] -> release_particle();
+		delete (this -> children[last_index]);
+		this -> add_particle(temp);
+	}
+	else if(first_index != -1)
+	{
+		for (int i = first_index; i < 8; i++)
+		{
+			if (this -> children[i] != NULL)
+			{
+				this -> children[i] -> remove_redundancy();
+			}
+		}
+	}
+}
