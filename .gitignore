@@ -11,3 +11,6 @@
 *.lai
 *.la
 *.a
+
+# DAT's
+*.dat
