@@ -20,12 +20,12 @@ vector::~vector()
 {
 }
 
-void vector::print()
+void vector::print(void)
 {
 	std::cout << this -> x << ", " << this -> y << ", " << this -> z << std::endl;
 }
 
-void vector::print_inline()
+void vector::print_inline(void)
 {
 	std::cout << this -> x << ", " << this -> y << ", " << this -> z;
 }
@@ -70,32 +70,32 @@ vector& vector::operator = (const vector &v)
 	return *this;
 }
 
-const double vector::get_x()
+double vector::get_x(void)
 {
 	return this -> x;
 }
 
-const double vector::get_y()
+double vector::get_y(void)
 {
 	return this -> y;
 }
 
-const double vector::get_z()
+double vector::get_z(void)
 {
 	return this -> z;
 }
 
-const double distance(vector *a, vector *b)
+double distance(vector *a, vector *b)
 {
 	return sqrt(pow(a -> get_x() - b -> get_x(), 2) + pow(a -> get_y() - b -> get_y(), 2) + pow(a -> get_z() - b -> get_z(), 2));
 }
 
-const double vector::magnitude()
+double vector::magnitude(void)
 {
 	return sqrt(pow(this -> x, 2) + pow(this -> y, 2) + pow(this -> z, 2));
 }
 
-void vector::normalize()
+void vector::normalize(void)
 {
 	double mag = this -> magnitude();
 	this -> x /= mag;

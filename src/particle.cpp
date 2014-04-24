@@ -19,17 +19,17 @@ void particle::set_container(quadtree *con)
 	this -> container = con;
 }
 
-double particle::get_mass()
+double particle::get_mass(void)
 {
 	return this -> mass;
 }
 
-vector* particle::get_pos()
+vector* particle::get_pos(void)
 {
 	return &(this -> position);
 }
 
-void particle::set_acc_zero()
+void particle::set_acc_zero(void)
 {
 	vector temp = vector(0, 0, 0);
 	this -> acceleration = temp;
@@ -50,7 +50,7 @@ void particle::update(double dt)
 	this -> position += temp;
 }
 
-void particle::print()
+void particle::print(void)
 {
 	std::cout << "Particle @ " << this << ", pos: ";
 	this -> position.print_inline();
@@ -60,7 +60,7 @@ void particle::print()
 	this -> acceleration.print();
 }
 
-quadtree* particle::get_container()
+quadtree* particle::get_container(void)
 {
 	return this -> container;
 }

@@ -7,6 +7,21 @@
 #include <iostream>
 #include <queue>
 #include <math.h>
+#include <stdio.h>
+#include <fstream>
+#include <pthread.h>
+
+#define NUM_THREADS 4
+
+struct thread_data
+{
+	int thread_id;
+	std::vector<particle*> *particles;
+	quadtree *root;
+	unsigned int start;
+	unsigned int end;
+	double theta;
+};
 
 double random_double(double low, double high)
 {
@@ -27,12 +42,12 @@ void generate_particle(double size, std::vector<particle*> &particles, quadtree 
 {
 	vector temp = random_vector(-1*(size/2), size/2);
 	vector null = vector(0, 0, 0);
-	particle* par = new particle(&temp, &null, &null, 1.0);
+	particle* par = new particle(&temp, &null, &null, 1e10);
 	particles.push_back(par);
 	root -> add_particle(par);
 }
 
-void check_tree(std::vector<particle*> &particles, quadtree *root)
+void check_tree(std::vector<particle*> &particles)
 {
 	for (unsigned int i = 0; i < particles.size(); i++)
 	{
@@ -79,8 +94,12 @@ void barnes_hut(std::vector<particle*> &particles, quadtree *root, double theta)
 	quadtree* node;
 	particle* curr;
 	vector grav_to;
+	double percent;
 	for (unsigned int i = 0; i < particles.size(); i++)
 	{
+		percent = (double) i * 100;
+		percent /= particles.size();
+		printf("%3.2f%%", percent);
 		curr = particles[i];
 		curr -> set_acc_zero();
 		nodes.push(root);
@@ -104,60 +123,118 @@ void barnes_hut(std::vector<particle*> &particles, quadtree *root, double theta)
 				curr -> set_acc_offset(&grav_to);
 			}
 		}
+		std::cout << "\b\b\b\b\b\b\b";
 	}
+}
+
+void *barnes_hut_thread(void *data)
+{
+	struct thread_data *args;
+	args = (struct thread_data*) data;
+	std::queue<quadtree*> nodes;
+	quadtree* node;
+	quadtree* root = args -> root;
+	particle* curr;
+	std::vector<particle*> *particles = args -> particles;
+	vector grav_to;
+	double theta = args -> theta;
+	for (unsigned int i = (args -> start); i < (args -> end); i++)
+	{
+		curr = (*particles)[i];
+		curr -> set_acc_zero();
+		nodes.push(root);
+		while (!nodes.empty())
+		{
+			node = nodes.front();
+			nodes.pop();
+			if (node -> get_side() / distance(node -> get_com(), curr -> get_pos()) > theta && node -> get_particle() == NULL)
+			{
+				for (unsigned int i = 0; i < 8; i++)
+				{
+					if (node -> get_child(i) != NULL)
+					{
+						nodes.push(node -> get_child(i));
+					}
+				}
+			}
+			else
+			{
+				grav_to = gravity(curr, node);
+				curr -> set_acc_offset(&grav_to);
+			}
+		}
+	}
+	pthread_exit(NULL);
+}
+
+void dump(unsigned int frame, std::vector<particle*> &particles)
+{
+	unsigned int size = sizeof(particle);
+	std::string filename = std::to_string(frame);
+	while (filename.length() < 4)
+	{
+		filename.insert(0, "0");
+	}
+	filename += ".dat";
+	std::fstream outfile(filename, std::ios::out | std::ios::binary);
+	outfile.seekp(0);
+	for (unsigned int i = 0; i < particles.size(); i++)
+	{
+		outfile.write((char*)particles[i], size);
+	}
+	outfile.close();
 }
 
 int main()
 {
+	//sizeof(particle) = 88
+	//sizeof(quadtree) = 144
 	srand(time(NULL));
 	vector origin = vector(0, 0, 0);
-	double size = 1024;
+	double size = 2048;
 	double theta = 0.5;
+	double dt = 0.03333;
+	unsigned int frames = 1;
+	unsigned int n_p = 800000;
 	quadtree* root = new quadtree(&origin, size);
 	std::vector<particle*> particles;
-	vector a = vector(-256, -256, -256);
-	vector b = vector(-256, -256,  256);
-	vector c = vector(-256,  256, -256);
-	vector d = vector(-256,  256,  256);
-	vector e = vector( 256, -256, -256);
-	vector f = vector( 256, -256,  256);
-	vector g = vector( 256,  256, -256);
-	vector h = vector( 256,  256,  256);
-	vector q = vector( 384,  384,  384);
-	particle *i = new particle(&a, &origin, &origin, 1.0);
-	particle *j = new particle(&b, &origin, &origin, 1.0);
-	particle *k = new particle(&c, &origin, &origin, 1.0);
-	particle *l = new particle(&d, &origin, &origin, 1.0);
-	particle *m = new particle(&e, &origin, &origin, 1.0);
-	particle *n = new particle(&f, &origin, &origin, 1.0);
-	particle *o = new particle(&g, &origin, &origin, 1.0);
-	particle *p = new particle(&h, &origin, &origin, 1e16);
-	root -> add_particle(i);
-	root -> add_particle(j);
-	root -> add_particle(k);
-	root -> add_particle(l);
-	root -> add_particle(m);
-	root -> add_particle(n);
-	root -> add_particle(o);
-	root -> add_particle(p);
-	particles.push_back(j);
-	particles.push_back(k);
-	particles.push_back(l);
-	particles.push_back(m);
-	particles.push_back(n);
-	particles.push_back(o);
-	particles.push_back(p);
-	for (int i = 0; i < 2; i++)
+	pthread_t threads[NUM_THREADS];
+	struct thread_data td[NUM_THREADS];
+	int rc;
+	std::cout << "Generating particles..." << std::endl;
+	for (unsigned int i = 0; i < n_p; i++)
 	{
-		root -> print_info(0);
+		generate_particle(size, particles, root);
+	}
+	for (unsigned int i = 0; i < frames; i++)
+	{
+		std::cout << "Frame " << i + 1 << std::endl;
+		//root -> print_info(0);
 		root -> calc_mass();
 		root -> calc_com();
-		barnes_hut(particles, root, theta);
-		update_all(particles, 1);
-		check_tree(particles, root);
+		//barnes_hut(particles, root, theta);
+		for (unsigned int i = 0; i < NUM_THREADS; i++)
+		{
+			td[i].thread_id = i;
+			td[i].particles = &particles;
+			td[i].root = root;
+			td[i].start = (n_p / NUM_THREADS) * i;
+			td[i].end = (n_p / NUM_THREADS) * (i + 1);
+			td[i].theta = theta;
+			rc = pthread_create(&threads[i], NULL, barnes_hut_thread, (void*) &td[i]);
+			if (rc)
+			{
+				std::cout << "Could not create thread." << std::endl;
+				exit(-1);
+			}
+		}
+		update_all(particles, dt);
+		check_tree(particles);
 		root -> clean();
 		root -> remove_redundancy();
+		dump(i, particles);
 	}
 	delete root;
+	pthread_exit(NULL);
 	return 0;
 }

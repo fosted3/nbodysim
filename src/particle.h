@@ -12,13 +12,13 @@ class particle
 		particle();
 		particle(vector*, vector*, vector*, double);
 		void set_container(quadtree*);
-		double get_mass();
-		vector* get_pos();
-		void set_acc_zero();
+		double get_mass(void);
+		vector* get_pos(void);
+		void set_acc_zero(void);
 		void set_acc_offset(vector*);
 		void update(double dt);
-		void print();
-		quadtree* get_container();
+		void print(void);
+		quadtree* get_container(void);
 	private:
 		vector position;
 		vector velocity;

@@ -80,7 +80,7 @@ quadtree::~quadtree()
 	}
 }
 
-void quadtree::print_info()
+void quadtree::print_info(void)
 {
 	std::cout << "Quadtree node @ " << this << ", center @ ";
 	this -> center.print_inline();
@@ -186,12 +186,12 @@ bool quadtree::add_particle(particle *par)
 	return true;
 }
 
-double quadtree::get_mass()
+double quadtree::get_mass(void)
 {
 	return this -> mass;
 }
 
-void quadtree::calc_mass() //call on root
+void quadtree::calc_mass(void) //call on root
 {
 	if (this -> p == NULL)
 	{
@@ -211,7 +211,7 @@ void quadtree::calc_mass() //call on root
 	}
 }
 
-void quadtree::calc_com() //call on root
+void quadtree::calc_com(void) //call on root
 {
 	if (this -> p != NULL)
 	{
@@ -236,12 +236,12 @@ void quadtree::calc_com() //call on root
 	//this -> com.print();
 }
 
-vector* quadtree::get_com()
+vector* quadtree::get_com(void)
 {
 	return &(this -> com);
 }
 
-bool quadtree::clean() //only call on root
+bool quadtree::clean(void) //only call on root
 {
 	if (this -> p != NULL)
 	{
@@ -285,17 +285,17 @@ bool quadtree::inside(particle* par)
 	return true;
 }
 
-void quadtree::release_particle()
+void quadtree::release_particle(void)
 {
 	this -> p = NULL;
 }
 
-quadtree* quadtree::get_parent()
+quadtree* quadtree::get_parent(void)
 {
 	return this -> parent;
 }
 
-double quadtree::get_side()
+double quadtree::get_side(void)
 {
 	return this -> side;
 }
@@ -305,12 +305,12 @@ quadtree* quadtree::get_child(int i)
 	return (this -> children[i]);
 }
 
-particle* quadtree::get_particle()
+particle* quadtree::get_particle(void)
 {
 	return this -> p;
 }
 
-void quadtree::remove_redundancy()
+void quadtree::remove_redundancy(void)
 {
 	if (this -> p != NULL)
 	{
