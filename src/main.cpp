@@ -1,3 +1,4 @@
+//#define THREADED
 #include "vector.h"
 #include "particle.h"
 #include "quadtree.h"
@@ -9,9 +10,10 @@
 #include <math.h>
 #include <stdio.h>
 #include <fstream>
-#include <pthread.h>
 
+#ifdef THREADED
 #define NUM_THREADS 4
+#include <pthread.h>
 
 struct thread_data
 {
@@ -22,6 +24,8 @@ struct thread_data
 	unsigned int end;
 	double theta;
 };
+
+#endif
 
 double random_double(double low, double high)
 {
@@ -127,6 +131,8 @@ void barnes_hut(std::vector<particle*> &particles, quadtree *root, double theta)
 	}
 }
 
+#ifdef THREADED
+
 void *barnes_hut_thread(void *data)
 {
 	struct thread_data *args;
@@ -167,6 +173,8 @@ void *barnes_hut_thread(void *data)
 	pthread_exit(NULL);
 }
 
+#endif
+
 void dump(unsigned int frame, std::vector<particle*> &particles)
 {
 	unsigned int size = sizeof(particle);
@@ -195,12 +203,14 @@ int main()
 	double theta = 0.5;
 	double dt = 0.03333;
 	unsigned int frames = 1;
-	unsigned int n_p = 800000;
+	unsigned int n_p = 100000;
 	quadtree* root = new quadtree(&origin, size);
 	std::vector<particle*> particles;
+#ifdef THREADED
 	pthread_t threads[NUM_THREADS];
 	struct thread_data td[NUM_THREADS];
 	int rc;
+#endif
 	std::cout << "Generating particles..." << std::endl;
 	for (unsigned int i = 0; i < n_p; i++)
 	{
@@ -212,7 +222,10 @@ int main()
 		//root -> print_info(0);
 		root -> calc_mass();
 		root -> calc_com();
-		//barnes_hut(particles, root, theta);
+#ifndef THREADED
+		barnes_hut(particles, root, theta);
+#endif
+#ifdef THREADED
 		for (unsigned int i = 0; i < NUM_THREADS; i++)
 		{
 			td[i].thread_id = i;
@@ -228,6 +241,7 @@ int main()
 				exit(-1);
 			}
 		}
+#endif
 		update_all(particles, dt);
 		check_tree(particles);
 		root -> clean();
