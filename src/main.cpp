@@ -52,18 +52,21 @@ void generate_particle(double size, std::vector<particle*> &particles, quadtree 
 	root -> add_particle(par);
 }
 
-void check_tree(std::vector<particle*> &particles)
+void check_tree(std::vector<particle*> &particles, quadtree *root)
 {
 	for (unsigned int i = 0; i < particles.size(); i++)
 	{
 		if (!particles[i] -> get_container() -> inside(particles[i]))
-		{	
-			particles[i] -> get_container() -> release_particle();
-			if (!particles[i] -> get_container() -> get_parent() -> add_particle(particles[i]))
+		{
+			if (!root -> inside(particles[i]))
 			{
 				delete particles[i];
 				particles.erase(particles.begin() + i);
 				i--;
+			}
+			else
+			{
+				root -> add_particle(particles[i]);
 			}
 		}
 	}
@@ -219,12 +222,14 @@ int main()
 {
 	//sizeof(particle) = 88
 	//sizeof(quadtree) = 144
-	srand(time(NULL));
+	unsigned long seed = time(NULL);
+	std::cout << "Seed: " << seed << std::endl;
+	srand(seed);
 	vector origin = vector(0, 0, 0);
 	double size = 2048;
 	double theta = 0.5;
 	double dt = 0.03333;
-	unsigned int frames = 1;
+	unsigned int frames = 300;
 	unsigned int n_p = 100000;
 	quadtree* root = new quadtree(&origin, size);
 	std::vector<particle*> particles;
@@ -265,7 +270,7 @@ int main()
 		}
 #endif
 		update_all(particles, dt);
-		check_tree(particles);
+		check_tree(particles, root);
 		root -> clean();
 		root -> remove_redundancy();
 		//dump(i, particles);

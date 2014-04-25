@@ -157,7 +157,7 @@ bool quadtree::add_particle(particle *par)
 			{
 				this -> allocate_child(i);
 			}
-			this -> children[i] -> add_particle(par);
+			return (this -> children[i] -> add_particle(par));
 		}
 	}
 	else
