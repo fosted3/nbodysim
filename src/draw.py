@@ -1,4 +1,5 @@
 from PIL import Image
+from math import sqrt
 
 def clamp(a, x, b):
 	if (x < a):
@@ -45,7 +46,23 @@ def render(frame, size):
 	im.save(gen_image(frame))
 	return True
 	
+def render_iso(frame, size):
+	try:
+		data = open(gen_data(frame), 'r')
+	except:
+		return False
+	im = Image.new("RGB", (size * 2, size * 2))
+	pix = im.load()
+	for line in data:
+		temp = get_tuple(line)
+		x = clamp(0, int((sqrt(3) / 2.0) * (temp[0] - temp[1]) + size), (size * 2) - 1)
+		y = clamp(0, int((-0.5) * (temp[0] + temp[1] + 2 * temp[2]) + size), (size * 2) - 1)
+		pix[x, y] = (255, 255, 255)
+	print("Saving " + gen_image(frame))
+	im.save(gen_image(frame))
+	return True
+	
 frame = 0
 size = 1024
-while (render(frame, size)):
+while (render_iso(frame, size)):
 	frame += 1
