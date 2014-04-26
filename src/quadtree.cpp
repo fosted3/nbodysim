@@ -74,10 +74,10 @@ quadtree::~quadtree()
 			delete children[i];
 		}
 	}
-	if (this -> p != NULL)
+	/*if (this -> p != NULL)
 	{
 		delete p;
-	}
+	}*/
 }
 
 void quadtree::print_info(void)

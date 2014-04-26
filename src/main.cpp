@@ -10,6 +10,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <fstream>
+#include <cassert>
 
 #ifdef THREADED
 
@@ -47,7 +48,8 @@ void generate_particle(double size, std::vector<particle*> &particles, quadtree 
 {
 	vector temp = random_vector(-1*(size/2), size/2);
 	vector null = vector(0, 0, 0);
-	particle* par = new particle(&temp, &null, &null, 1e10);
+	double mass = random_double(5e9, 5e10);
+	particle* par = new particle(&temp, &null, &null, mass);
 	particles.push_back(par);
 	root -> add_particle(par);
 }
@@ -56,18 +58,11 @@ void check_tree(std::vector<particle*> &particles, quadtree *root)
 {
 	for (unsigned int i = 0; i < particles.size(); i++)
 	{
-		if (!particles[i] -> get_container() -> inside(particles[i]))
+		if (!root -> inside(particles[i]))
 		{
-			if (!root -> inside(particles[i]))
-			{
-				delete particles[i];
-				particles.erase(particles.begin() + i);
-				i--;
-			}
-			else
-			{
-				root -> add_particle(particles[i]);
-			}
+			delete particles[i];
+			particles.erase(particles.begin() + i);
+			i--;
 		}
 	}
 }	
@@ -96,7 +91,7 @@ vector gravity(particle* par, quadtree* node)
 	return acc;
 }
 
-void barnes_hut(std::vector<particle*> &particles, quadtree *root, double theta)
+void barnes_hut(std::vector<particle*> &particles, quadtree *root, double theta, bool print)
 {
 	std::queue<quadtree*> nodes;
 	quadtree* node;
@@ -105,9 +100,12 @@ void barnes_hut(std::vector<particle*> &particles, quadtree *root, double theta)
 	double percent;
 	for (unsigned int i = 0; i < particles.size(); i++)
 	{
-		percent = (double) i * 100;
-		percent /= particles.size();
-		printf("%3.2f%%", percent);
+		if (print)
+		{
+			percent = (double) i * 100;
+			percent /= particles.size();
+			printf("%3.2f%%", percent);
+		}
 		curr = particles[i];
 		curr -> set_acc_zero();
 		nodes.push(root);
@@ -131,7 +129,10 @@ void barnes_hut(std::vector<particle*> &particles, quadtree *root, double theta)
 				curr -> set_acc_offset(&grav_to);
 			}
 		}
-		std::cout << "\b\b\b\b\b\b\b";
+		if (print)
+		{
+			std::cout << "\b\b\b\b\b\b\b";
+		}
 	}
 }
 
@@ -179,7 +180,13 @@ void *barnes_hut_thread(void *data)
 
 #endif
 
-void dump(unsigned int frame, std::vector<particle*> &particles)
+bool file_exists(const char *filename)
+{
+	std::ifstream ifile(filename);
+	return ifile;
+}
+
+void dump(unsigned int frame, std::vector<particle*> &particles, bool nc)
 {
 	unsigned int size = sizeof(particle);
 	std::string filename = std::to_string(frame);
@@ -189,6 +196,14 @@ void dump(unsigned int frame, std::vector<particle*> &particles)
 	}
 	filename += ".dat";
 	filename.insert(0, "./data/");
+	if (nc)
+	{
+		assert(!file_exists(filename.c_str()));
+	}
+	if (file_exists(filename.c_str()))
+	{
+		assert(remove(filename.c_str()) == 0);
+	}
 	std::fstream outfile(filename, std::ios::out | std::ios::binary);
 	outfile.seekp(0);
 	for (unsigned int i = 0; i < particles.size(); i++)
@@ -198,13 +213,21 @@ void dump(unsigned int frame, std::vector<particle*> &particles)
 	outfile.close();
 }
 
-void dump_plaintext(unsigned int frame, std::vector<particle*> &particles)
+void dump_plaintext(unsigned int frame, std::vector<particle*> &particles, bool nc)
 {
 	std::string filename = std::to_string(frame);
 	vector temp;
 	while (filename.length() < 4)
 	{
 		filename.insert(0, "0");
+	}
+	if (nc)
+	{
+		assert(!file_exists(filename.c_str()));
+	}
+	if (file_exists(filename.c_str()))
+	{
+		assert(remove(filename.c_str()) == 0);
 	}
 	filename += ".txt";
 	filename.insert(0, "./data/");
@@ -223,13 +246,15 @@ int main()
 	//sizeof(particle) = 88
 	//sizeof(quadtree) = 144
 	unsigned long seed = time(NULL);
+	//seed = 1398462394;
 	std::cout << "Seed: " << seed << std::endl;
 	srand(seed);
 	vector origin = vector(0, 0, 0);
-	double size = 2048;
+	double size = 1024;
 	double theta = 0.5;
 	double dt = 0.03333;
-	unsigned int frames = 300;
+	bool print = true;
+	unsigned int frames = 1000;
 	unsigned int n_p = 100000;
 	quadtree* root = new quadtree(&origin, size);
 	std::vector<particle*> particles;
@@ -245,12 +270,12 @@ int main()
 	}
 	for (unsigned int i = 0; i < frames; i++)
 	{
-		std::cout << "Frame " << i + 1 << std::endl;
+		std::cout << "Frame " << i + 1 << "/" << frames << std::endl;
 		//root -> print_info(0);
 		root -> calc_mass();
 		root -> calc_com();
 #ifndef THREADED
-		barnes_hut(particles, root, theta);
+		barnes_hut(particles, root, theta, print);
 #endif
 #ifdef THREADED
 		for (unsigned int i = 0; i < NUM_THREADS; i++)
@@ -271,12 +296,22 @@ int main()
 #endif
 		update_all(particles, dt);
 		check_tree(particles, root);
-		root -> clean();
-		root -> remove_redundancy();
+		/*root -> clean();
+		root -> remove_redundancy();*/
+		delete root;
+		root = new quadtree(&origin, size);
+		for (unsigned int i = 0; i < particles.size(); i++)
+		{
+			root -> add_particle(particles[i]);
+		}
 		//dump(i, particles);
-		dump_plaintext(i, particles);
+		dump_plaintext(i, particles, false);
 	}
 	delete root;
+	for (unsigned int i = 0; i < particles.size(); i++)
+	{
+		delete particles[i];
+	}
 	pthread_exit(NULL);
 	return 0;
 }
