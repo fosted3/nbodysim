@@ -21,14 +21,12 @@ class quadtree
 		double get_mass(void);
 		void calc_com(void);
 		vector* get_com(void);
-		bool clean(void);
 		bool inside(particle*);
 		void release_particle(void);
 		quadtree* get_parent(void);
 		double get_side(void);
 		quadtree* get_child(int);
 		particle* get_particle(void);
-		void remove_redundancy(void);
 	private:
 		quadtree* parent;
 		vector center;
