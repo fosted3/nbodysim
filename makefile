@@ -1,5 +1,5 @@
 CC=g++
-CFLAGS=-c -Wall -g -03 -std=c++0x -Wextra
+CFLAGS=-c -Wall -g -O3 -std=c++0x -Wextra
 LDFLAGS=-lpthread
 EXECUTABLE=bin/nbodysim
 
