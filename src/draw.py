@@ -1,5 +1,6 @@
 from PIL import Image
 from math import sqrt
+import os.path
 
 def clamp(a, x, b):
 	if (x < a):
@@ -47,6 +48,8 @@ def render(frame, size):
 	return True
 	
 def render_iso(frame, size):
+	if (os.path.isfile(gen_image(frame))):
+		return True
 	try:
 		data = open(gen_data(frame), 'r')
 	except:
