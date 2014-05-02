@@ -13,7 +13,7 @@ class quadtree
 		quadtree(vector*, double, quadtree*); //center, side, parent
 		quadtree(vector*, double);
 		~quadtree();
-		bool add_particle(particle*);
+		void add_particle(particle*);
 		void allocate_child(int);
 		void print_info(void);
 		void print_info(int);

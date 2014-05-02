@@ -112,16 +112,9 @@ void quadtree::print_info(int depth)
 	}
 }
 
-bool quadtree::add_particle(particle *par)
+void quadtree::add_particle(particle *par)
 {
-	if (!this -> inside(par))
-	{
-		if (this -> parent == NULL)
-		{
-			return false;
-		}
-		return (this -> parent -> add_particle(par));
-	}
+	assert(this -> inside(par));
 	if (this -> p == NULL)
 	{
 		bool leaf = true;
@@ -156,7 +149,7 @@ bool quadtree::add_particle(particle *par)
 			{
 				this -> allocate_child(i);
 			}
-			return (this -> children[i] -> add_particle(par));
+			this -> children[i] -> add_particle(par);
 		}
 	}
 	else
@@ -182,7 +175,6 @@ bool quadtree::add_particle(particle *par)
 		this -> p = NULL;
 		this -> add_particle(par);
 	}
-	return true;
 }
 
 double quadtree::get_mass(void)
