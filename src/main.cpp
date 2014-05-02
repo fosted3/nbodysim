@@ -69,8 +69,10 @@ void generate_particle(settings &s, std::vector<particle*> &particles, quadtree 
 	vector temp = random_vector(-1*(s.size/2), s.size/2);
 	vector null = vector(0, 0, 0);
 	double mass = random_double(s.min_mass, s.max_mass);
-	vector vec = random_vector(s.min_vel, s.max_vel);
-	particle* par = new particle(&temp, &vec, &null, mass);
+	vector vel = random_vector(-1, 1);
+	vel.normalize();
+	vel *= random_double(s.min_vel, s.max_vel);
+	particle* par = new particle(&temp, &vel, &null, mass);
 	particles.push_back(par);
 	root -> add_particle(par);
 }
@@ -121,7 +123,7 @@ void barnes_hut(std::vector<particle*> &particles, quadtree *root, double theta,
 	double percent;
 	for (unsigned int i = 0; i < particles.size(); i++)
 	{
-		if (print)
+		if (print && (i % 1000) == 0)
 		{
 			percent = (double) i * 100;
 			percent /= particles.size();
@@ -480,8 +482,8 @@ int main(int argc, char **argv)
 			rc = pthread_create(&threads[i], NULL, barnes_hut_thread, (void*) &td[i]);
 			if (rc)
 			{
-				std::cout << "Could not create thread." << std::endl;
-				exit(-1);
+				std::cerr << "Could not create thread." << std::endl;
+				exit(1);
 			}
 		}
 #endif
