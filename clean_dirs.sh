@@ -1,4 +1,4 @@
 #!/bin/sh
-rm data/*.txt
-rm data/*.dat
-rm img/*.png
+rm -f data/*.txt
+rm -f data/*.dat
+rm -f img/*.png
