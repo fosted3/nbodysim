@@ -1,6 +1,7 @@
 from PIL import Image
 from math import sqrt
 import os.path
+import sys
 
 def clamp(a, x, b):
 	if (x < a):
@@ -69,9 +70,11 @@ def render_iso(frame, size, inc):
 	print("Saving " + gen_image(frame))
 	im.save(gen_image(frame))
 	return True
-	
+if (len(sys.argv) != 3):
+	print("Usage: python " + sys.argv[0] + " [size] [increment]")
+	raise sys.exit()
 frame = 0
-size = 1024
-inc = 2
+size = int(sys.argv[1])
+inc = int(sys.argv[2])
 while (render_iso(frame, size, inc)):
 	frame += 1
