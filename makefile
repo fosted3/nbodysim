@@ -1,6 +1,6 @@
 CC=g++
 CFLAGS=-c -Wall -g -O3 -std=c++0x -Wextra
-LDFLAGS=-lpthread
+LDFLAGS=-lpthread -lm
 EXECUTABLE=bin/nbodysim
 
 all: $(EXECUTABLE)
