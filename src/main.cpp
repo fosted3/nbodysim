@@ -126,11 +126,11 @@ void barnes_hut(std::vector<particle*> &particles, quadtree *root, double theta,
 	double percent;
 	for (unsigned int i = 0; i < particles.size(); i++)
 	{
-		if (print && (i % 1000) == 0)
+		if (print && (i % 100) == 0)
 		{
 			percent = (double) i * 100;
 			percent /= particles.size();
-			printf("%3.3f%%", percent);
+			printf("%3.2f%%", percent);
 		}
 		curr = particles[i];
 		curr -> set_acc_zero();

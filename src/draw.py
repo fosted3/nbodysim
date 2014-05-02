@@ -36,6 +36,8 @@ def gen_image(frame):
 	return fname
 	
 def render(frame, size, inc, proj):
+	if (os.path.isfile(gen_image(frame))):
+		return True
 	try:
 		data = open(gen_data(frame), 'r')
 	except:
