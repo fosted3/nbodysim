@@ -478,6 +478,10 @@ void read_settings(settings &s, const char* sfile)
 			{
 				cfg >> s.max_vel;
 			}
+			else if (var.compare("brightness") == 0 || var.compare("projection") == 0)
+			{
+				cfg >> var;
+			}
 			else
 			{
 				std::cerr << "Unrecognized variable " << var << std::endl;
