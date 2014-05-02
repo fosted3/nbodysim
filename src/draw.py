@@ -35,46 +35,51 @@ def gen_image(frame):
 	fname = "img/" + fname + ".png"
 	return fname
 	
-def render(frame, size, inc):
+def render(frame, size, inc, proj):
 	try:
 		data = open(gen_data(frame), 'r')
 	except:
 		return False
-	im = Image.new("RGB", (size, size))
+	if (proj == "front"):
+		im = Image.new("RGB", (size, size))
+	elif (proj == "iso"):
+		im = Image.new("RGB", (size * 2, size * 2))
+	else:
+		print("Unknown projection " + proj)
+		raise sys.exit()
 	pix = im.load()
-	i = 0
 	for line in data:
 		temp = get_tuple(line)
-		x = clamp(0, int(temp[0] + size/2), size - 1)
-		y = clamp(0, int(temp[1] + size/2), size - 1)
+		if (proj == "front"):
+			x = clamp(0, int(temp[0] + size/2), size - 1)
+			y = clamp(0, int(temp[1] + size/2), size - 1)
+		elif (proj == "iso"):
+			x = clamp(0, int((sqrt(3) / 2.0) * (temp[0] - temp[1]) + size), (size * 2) - 1)
+			y = clamp(0, int((-0.5) * (temp[0] + temp[1] + 2 * temp[2]) + size), (size * 2) - 1)
 		pix[x, y] = inc_tuple(pix[x, y], inc)
 	print("Saving " + gen_image(frame))
 	im.save(gen_image(frame))
 	return True
 	
-def render_iso(frame, size, inc):
-	if (os.path.isfile(gen_image(frame))):
-		return True
-	try:
-		data = open(gen_data(frame), 'r')
-	except:
-		return False
-	im = Image.new("RGB", (size * 2, size * 2))
-	pix = im.load()
-	i = 0
-	for line in data:
-		temp = get_tuple(line)
-		x = clamp(0, int((sqrt(3) / 2.0) * (temp[0] - temp[1]) + size), (size * 2) - 1)
-		y = clamp(0, int((-0.5) * (temp[0] + temp[1] + 2 * temp[2]) + size), (size * 2) - 1)
-		pix[x, y] = inc_tuple(pix[x, y], inc)
-	print("Saving " + gen_image(frame))
-	im.save(gen_image(frame))
-	return True
-if (len(sys.argv) != 3):
-	print("Usage: python " + sys.argv[0] + " [size] [increment]")
+if (len(sys.argv) != 2):
+	print(len(sys.argv))
+	print("Usage: python " + sys.argv[0] + " config")
 	raise sys.exit()
+
 frame = 0
-size = int(sys.argv[1])
-inc = int(sys.argv[2])
-while (render_iso(frame, size, inc)):
+size = -1
+inc = 255
+proj = "iso"
+conf = sys.argv[1]
+config = open(conf, 'r')
+for line in config:
+	pair = line.split()
+	if (len(pair) == 2):
+		if (pair[0] == "size"):
+			size = int(pair[1])
+		if (pair[0] == "projection"):
+			proj = pair[1]
+		if (pair[0] == "brightness"):
+			inc = int(pair[1])
+while (render(frame, size, inc, proj)):
 	frame += 1
