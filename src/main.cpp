@@ -556,12 +556,14 @@ int main(int argc, char **argv)
 		start_frame = read_data(particles, root, config.num_frames);
 		if (start_frame == 0)
 		{
-			std::cerr << "No data to resume from. Aborting." << std::endl;
-			exit(1);
+			std::cout << "No data to resume from." << std::endl;
 		}
-		std::cout << "Resuming from " << start_frame << std::endl;
+		else
+		{
+			std::cout << "Resuming from " << start_frame << std::endl;
+		}
 	}
-	else
+	if (!config.read_existing || start_frame == 0)
 	{
 		std::cout << "Generating particles..." << std::endl;
 		for (unsigned int i = 0; i < config.num_particles; i++)
