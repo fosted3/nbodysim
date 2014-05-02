@@ -2,7 +2,8 @@
 #include <cstddef>
 #include <cassert>
 #include <iostream>
-#include <stdlib.h>
+//#include <stdlib.h>
+//#include <cmath>
 
 quadtree::quadtree()
 {
@@ -114,7 +115,11 @@ void quadtree::print_info(int depth)
 
 void quadtree::add_particle(particle *par)
 {
-	assert(this -> inside(par));
+	if (!this -> inside(par))
+	{
+		par -> print();
+		assert(this -> inside(par));
+	}
 	if (this -> p == NULL)
 	{
 		bool leaf = true;
@@ -235,15 +240,15 @@ vector* quadtree::get_com(void)
 bool quadtree::inside(particle* par)
 {
 	vector *temp = par -> get_pos();
-	if (abs(temp -> get_x() - this -> center.get_x()) > (this -> side) / 2)
+	if ((temp -> get_x() - this -> center.get_x()) > ((this -> side) / 2.0) || (temp -> get_x() - this -> center.get_x()) < ((-1.0 * this -> side) / 2.0))
 	{
 		return false;
 	}
-	if (abs(temp -> get_y() - this -> center.get_y()) > (this -> side) / 2)
+	if ((temp -> get_y() - this -> center.get_y()) > ((this -> side) / 2.0) || (temp -> get_y() - this -> center.get_y()) < ((-1.0 * this -> side) / 2.0))
 	{
 		return false;
 	}
-	if (abs(temp -> get_z() - this -> center.get_z()) > (this -> side) / 2)
+	if ((temp -> get_z() - this -> center.get_z()) > ((this -> side) / 2.0) || (temp -> get_z() - this -> center.get_z()) < ((-1.0 * this -> side) / 2.0))
 	{
 		return false;
 	}
