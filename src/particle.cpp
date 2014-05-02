@@ -11,12 +11,6 @@ particle::particle(vector *pos, vector *vel, vector *acc, double mas)
 	this -> velocity = *vel;
 	this -> acceleration = *acc;
 	this -> mass = mas;
-	this -> container = NULL;
-}
-
-void particle::set_container(quadtree *con)
-{
-	this -> container = con;
 }
 
 double particle::get_mass(void)
@@ -58,9 +52,4 @@ void particle::print(void)
 	this -> velocity.print_inline();
 	std::cout << ", acc: ";
 	this -> acceleration.print();
-}
-
-quadtree* particle::get_container(void)
-{
-	return this -> container;
 }

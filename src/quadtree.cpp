@@ -136,7 +136,6 @@ bool quadtree::add_particle(particle *par)
 		if (leaf)
 		{
 			this -> p = par;
-			par -> set_container(this);
 		}
 		else
 		{
