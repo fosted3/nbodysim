@@ -13,6 +13,14 @@ particle::particle(vector *pos, vector *vel, vector *acc, double mas)
 	this -> mass = mas;
 }
 
+particle::particle(particle &p)
+{
+	this -> position = p.position;
+	this -> velocity = p.velocity;
+	this -> acceleration = p.acceleration;
+	this -> mass = p.mass;
+}
+
 double particle::get_mass(void)
 {
 	return this -> mass;

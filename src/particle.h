@@ -11,6 +11,7 @@ class particle
 	public:
 		particle();
 		particle(vector*, vector*, vector*, double);
+		particle(particle&);
 		double get_mass(void);
 		vector* get_pos(void);
 		void set_acc_zero(void);
