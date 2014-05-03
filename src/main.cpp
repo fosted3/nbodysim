@@ -363,21 +363,9 @@ void read_settings(settings &s, const char* sfile)
 			}
 			else if (var.compare("adaptive") == 0)
 			{
-<<<<<<< HEAD
 				cfg >> var;
 				if (var.compare("true") == 0) { s.adaptive = true; }
 				else { s.adaptive = false; }
-=======
-				cfg >> s.max_vel;
-			}
-			else if (var.compare("brightness") == 0 || var.compare("projection") == 0)
-			{
-				cfg >> var;
-			}
-			else
-			{
-				std::cerr << "Unrecognized variable " << var << std::endl;
->>>>>>> ff328857c11acab4e1513e68ad684036c2f58970
 			}
 			else if (var.compare("num_particles") == 0) { cfg >> s.num_particles; }
 			else if (var.compare("num_frames") == 0) { cfg >> s.num_frames; }
