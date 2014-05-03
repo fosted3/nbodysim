@@ -1,4 +1,9 @@
 //#define THREADED
+
+#define CUBE 0
+#define SPHERE 1
+#define SHELL 2
+
 #include "vector.h"
 #include "particle.h"
 #include "quadtree.h"
@@ -53,7 +58,11 @@ struct settings
 	double max_vel;
 	double max_vel_change;
 	double max_pos_change;
-	double max_adaptive_fraction;
+	double min_adaptive_dt;
+	double r_sphere;
+	double rotation_magnitude;
+	vector rotation_vector;
+	unsigned int gen_type;
 };
 
 double random_double(double low, double high)
@@ -73,13 +82,40 @@ vector random_vector(double low, double high)
 
 void generate_particle(settings &s, std::vector<particle*> &particles, quadtree *root)
 {
-	vector temp = random_vector(-1*(s.size/2), s.size/2);
 	vector null = vector(0, 0, 0);
 	double mass = random_double(s.min_mass, s.max_mass);
-	vector vel = random_vector(-1, 1);
-	vel.normalize();
-	vel *= random_double(s.min_vel, s.max_vel);
-	particle* par = new particle(&temp, &vel, &null, mass);
+	particle *par = NULL;
+	if (s.gen_type == CUBE)
+	{
+		vector temp = random_vector(-1*(s.size/2), s.size/2);
+		vector vel = random_vector(-1, 1);
+		vel.normalize();
+		vel *= random_double(s.min_vel, s.max_vel);
+		par = new particle(&temp, &vel, &null, mass);
+	}
+	else if (s.gen_type == SPHERE || s.gen_type == SHELL)
+	{
+		double radius = -1;
+		if (s.gen_type == SPHERE)
+		{
+			radius = random_double(0, 1);
+			radius = sqrt(radius) * s.r_sphere;		
+		}
+		else if (s.gen_type == SHELL)
+		{
+			radius = s.r_sphere;
+		}
+		assert(radius != -1);
+		double theta = random_double(0, 6.28318530718);
+		double azimuth = acos(random_double(-1, 1));
+		vector point = vector(radius * sin(azimuth) * cos(theta), radius * sin(azimuth) * sin(theta), radius * cos(azimuth));
+		vector rotation = s.rotation_vector;
+		rotation.normalize();
+		rotation *= s.rotation_magnitude;
+		vector velocity = cross(rotation, point);
+		par = new particle(&point, &velocity, &null, mass);
+	}
+	assert(par != NULL);
 	particles.push_back(par);
 	root -> add_particle(par);
 }
@@ -367,6 +403,36 @@ void read_settings(settings &s, const char* sfile)
 				if (var.compare("true") == 0) { s.adaptive = true; }
 				else { s.adaptive = false; }
 			}
+			else if (var.compare("rotation_vector") == 0)
+			{
+				double x;
+				double y;
+				double z;
+				cfg >> x;
+				cfg >> y;
+				cfg >> z;
+				s.rotation_vector = vector(x, y, z);
+			}
+			else if (var.compare("gen_type") == 0)
+			{
+				cfg >> var;
+				s.gen_type = 128;
+				if (var.compare("cube") == 0)
+				{
+					s.gen_type = CUBE;
+				}
+				else if (var.compare("sphere") == 0)
+				{
+					s.gen_type = SPHERE;
+				}
+				else if (var.compare("shell") == 0)
+				{
+					s.gen_type = SHELL;
+				}
+				assert(s.gen_type != 128);
+			}
+			else if (var.compare("r_sphere") == 0) { cfg >> s.r_sphere; }
+			else if (var.compare("rotation_magnitude") == 0) { cfg >> s.rotation_magnitude; }
 			else if (var.compare("num_particles") == 0) { cfg >> s.num_particles; }
 			else if (var.compare("num_frames") == 0) { cfg >> s.num_frames; }
 			else if (var.compare("size") == 0) { cfg >> s.size; }
@@ -379,10 +445,16 @@ void read_settings(settings &s, const char* sfile)
 			else if (var.compare("max_vel") == 0) { cfg >> s.max_vel; }
 			else if (var.compare("max_vel_change") == 0) { cfg >> s.max_vel_change; }
 			else if (var.compare("max_pos_change") == 0) { cfg >> s.max_pos_change; }
-			else if (var.compare("max_adaptive_fraction") == 0) { cfg >> s.max_adaptive_fraction; }
+			else if (var.compare("min_adaptive_dt") == 0) { cfg >> s.min_adaptive_dt; }
 			else if (var.compare("brightness") == 0) { cfg >> var; }
 			else if (var.compare("projection") == 0) { cfg >> var; }
 			else { std::cerr << "Unrecognized variable " << var << std::endl; }
+			/*
+			s.r_sphere = false;
+			s.rotation_magnitude = 0;
+			s.rotation_vector = vector(0, 0, 1);
+			s.gen_type = CUBE;
+			*/
 		}
 	}
 	else
@@ -414,9 +486,13 @@ void set_default(settings &s)
 	s.min_vel = 0;
 	s.max_vel = 0;
 	s.adaptive = false;
-	s.max_vel_change = 0;
-	s.max_pos_change = 0;
-	s.max_adaptive_fraction = 0.1;
+	s.max_vel_change = 3;
+	s.max_pos_change = 3;
+	s.min_adaptive_dt = 0.00333;
+	s.r_sphere = 100;
+	s.rotation_magnitude = 0.1;
+	s.rotation_vector = vector(0, 0, 1);
+	s.gen_type = CUBE;
 }
 
 int main(int argc, char **argv)
@@ -515,7 +591,7 @@ int main(int argc, char **argv)
 			adaptive_dt = update_all(particles, config.max_vel_change, config.max_pos_change);
 			if (adaptive_dt > config.dt) { adaptive_dt = config.dt; }
 			//if (elapsed_time + adaptive_dt > frame_time + config.dt) { adaptive_dt = (frame_time + config.dt) - elapsed_time; }
-			if (adaptive_dt < config.dt * config.max_adaptive_fraction) { adaptive_dt = config.dt * config.max_adaptive_fraction; }
+			if (adaptive_dt < config.min_adaptive_dt) { adaptive_dt = config.min_adaptive_dt; }
 			update_all(particles, adaptive_dt);
 			elapsed_time += adaptive_dt;
 			if (config.verbose) { std::cout << "Elapsed time: " << elapsed_time << std::endl; }

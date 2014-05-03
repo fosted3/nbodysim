@@ -46,6 +46,22 @@ Config file information:
   
   max_mass (default 5e11): maximum random mass.
   
-  min_vel (default 0): minimum random velocity.
+  min_vel (default 0): minimum random velocity (cube only).
   
-  max_vel (default 0): maximum random velocity.
+  max_vel (default 0): maximum random velocity (cube only).
+  
+  adaptive (default false): uses adaptive dt (experimental, but stable).
+  
+  min_adaptive_dt (default 0.00333): minimum adaptive dt. This overrides max_pos_change and max_vel_change if dt gets too small.
+  
+  max_pos_change (default 3): maximum position change under adaptive dt.
+  
+  max_vel_change (default 3): maximum velocity change under adaptive dt.
+  
+  gen_type (default cube): can be cube, sphere, or shell. This dictates how the particles are generated.
+  
+  r_sphere (default 100): radius of sphere or shell if gen_type sphere or shell used.
+  
+  rotation_magnitude (default 0.1): how fast particles rotate in sphere or shell configuration.
+  
+  rotation_vector (default <0, 0, 1>): the rotation vector. Normal to the plane of rotation.  

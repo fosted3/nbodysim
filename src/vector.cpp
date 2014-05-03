@@ -102,3 +102,8 @@ void vector::normalize(void)
 	this -> y /= mag;
 	this -> z /= mag;
 }
+
+vector cross(vector &a, vector &b)
+{
+	return vector(a.get_y()*b.get_z() - a.get_z()*b.get_y(), a.get_z()*b.get_x() - a.get_x()*b.get_z(), a.get_x()*b.get_y() - a.get_y()*b.get_x());
+}

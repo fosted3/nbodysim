@@ -27,5 +27,6 @@ class vector
 };
 
 double distance(vector*, vector*);
+vector cross(vector&, vector&);
 
 #endif
