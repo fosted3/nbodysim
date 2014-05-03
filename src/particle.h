@@ -16,7 +16,8 @@ class particle
 		vector* get_pos(void);
 		void set_acc_zero(void);
 		void set_acc_offset(vector*);
-		void update(double dt);
+		void update(double);
+		void update(double&, double&);
 		void print(void);
 	private:
 		vector position;

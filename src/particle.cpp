@@ -52,6 +52,12 @@ void particle::update(double dt)
 	this -> position += temp;
 }
 
+void particle::update(double &dv, double &dp)
+{
+	dv = this -> acceleration.magnitude();
+	dp = this -> velocity.magnitude();
+}
+
 void particle::print(void)
 {
 	std::cout << "Particle @ " << this << ", pos: ";

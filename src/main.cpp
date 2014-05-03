@@ -40,6 +40,7 @@ struct settings
 	bool keep_previous_binary;
 	bool keep_previous_text;
 	bool verbose;
+	bool adaptive;
 	unsigned int num_particles;
 	unsigned int num_frames;
 	double size;
@@ -50,6 +51,9 @@ struct settings
 	double max_mass;
 	double min_vel;
 	double max_vel;
+	double max_vel_change;
+	double max_pos_change;
+	double max_adaptive_fraction;
 };
 
 double random_double(double low, double high)
@@ -95,18 +99,30 @@ void check_tree(std::vector<particle*> &particles, quadtree *root)
 
 void update_all(std::vector<particle*> &particles, double dt)
 {
+	for (unsigned int i = 0; i < particles.size(); i++) { particles[i] -> update(dt); }
+}
+
+double update_all(std::vector<particle*> &particles, double max_vel_change, double max_pos_change)
+{
+	double max_vel = 0;
+	double max_pos = 0;
+	double temp_vel = -1;
+	double temp_pos = -1;
+	double dt = -1;
 	for (unsigned int i = 0; i < particles.size(); i++)
 	{
-		particles[i] -> update(dt);
+		particles[i] -> update(temp_vel, temp_pos);
+		if (temp_vel > max_vel) { max_vel = temp_vel; }
+		if (temp_pos > max_pos) { max_pos = temp_pos; }
 	}
+	if ((max_vel_change / max_vel) < (max_pos_change / max_pos)) { dt = (max_vel_change / max_vel); }
+	else { dt = (max_pos_change / max_pos); }
+	return dt;
 }
 
 vector gravity(particle* par, quadtree* node)
 {
-	if (par == node -> get_particle())
-	{
-		return vector(0, 0, 0);
-	}
+	if (par == node -> get_particle()) { return vector(0, 0, 0); }
 	vector acc = *(node -> get_com());
 	acc -= *(par -> get_pos());
 	double r_sq = pow(acc.magnitude(), -2);
@@ -143,10 +159,7 @@ void barnes_hut(std::vector<particle*> &particles, quadtree *root, double theta,
 			{
 				for (unsigned int i = 0; i < 8; i++)
 				{
-					if (node -> get_child(i) != NULL)
-					{
-						nodes.push(node -> get_child(i));
-					}
+					if (node -> get_child(i) != NULL) { nodes.push(node -> get_child(i)); }
 				}
 			}
 			else
@@ -155,10 +168,7 @@ void barnes_hut(std::vector<particle*> &particles, quadtree *root, double theta,
 				curr -> set_acc_offset(&grav_to);
 			}
 		}
-		if (print)
-		{
-			std::cout << "\b\b\b\b\b\b\b\b";
-		}
+		if (print) { std::cout << "\b\b\b\b\b\b\b"; }
 	}
 }
 
@@ -188,10 +198,7 @@ void *barnes_hut_thread(void *data)
 			{
 				for (unsigned int i = 0; i < 8; i++)
 				{
-					if (node -> get_child(i) != NULL)
-					{
-						nodes.push(node -> get_child(i));
-					}
+					if (node -> get_child(i) != NULL) { nodes.push(node -> get_child(i)); }
 				}
 			}
 			else
@@ -215,19 +222,10 @@ bool file_exists(const char *filename)
 std::string gen_filename(unsigned int frame, bool binary)
 {
 	std::string filename = std::to_string(frame);
-	while (filename.length() < 4)
-	{
-		filename.insert(0, "0");
-	}
+	while (filename.length() < 4) { filename.insert(0, "0"); }
 	filename.insert(0, "./data/");
-	if (binary)
-	{
-		filename += ".dat";
-	}
-	else
-	{
-		filename += ".txt";
-	}
+	if (binary) { filename += ".dat"; }
+	else { filename += ".txt"; }
 	return filename;	
 }
 
@@ -240,23 +238,14 @@ void dump(unsigned int frame, std::vector<particle*> &particles, bool overwrite,
 		std::cerr << "Overwrite disabled, cannot overwrite " << filename << ". Aborting." << std::endl;
 		exit(1);
 	}
-	if (file_exists(filename.c_str()))
-	{
-		assert(remove(filename.c_str()) == 0);
-	}
+	if (file_exists(filename.c_str())) { assert(remove(filename.c_str()) == 0); }
 	if (!keep_prev && frame > 0)
 	{
-		if (file_exists(gen_filename(frame - 1, true).c_str()))
-		{
-			assert(remove(gen_filename(frame - 1, true).c_str()) == 0);
-		}
+		if (file_exists(gen_filename(frame - 1, true).c_str())) { assert(remove(gen_filename(frame - 1, true).c_str()) == 0); }
 	}
 	std::fstream outfile(filename, std::ios::out | std::ios::binary);
 	outfile.seekp(0);
-	for (unsigned int i = 0; i < particles.size(); i++)
-	{
-		outfile.write((char*)particles[i], size);
-	}
+	for (unsigned int i = 0; i < particles.size(); i++) { outfile.write((char*)particles[i], size); }
 	outfile.close();
 }
 
@@ -266,14 +255,8 @@ unsigned int read_data(std::vector<particle*> &particles, quadtree *root, unsign
 	unsigned int size = sizeof(particle);
 	unsigned int frame = num_frames;
 	unsigned int num_particles;
-	while (!file_exists(gen_filename(frame, true).c_str()) && frame > 0)
-	{
-		frame--;
-	}
-	if (frame == 0)
-	{
-		return 0;
-	}
+	while (!file_exists(gen_filename(frame, true).c_str()) && frame > 0) { frame--; }
+	if (frame == 0) { return 0; }
 	std::fstream infile(gen_filename(frame, true), std::ios::in | std::ios::binary);
 	particle temp;
 	particle *to_add;
@@ -299,16 +282,10 @@ void dump_plaintext(unsigned int frame, std::vector<particle*> &particles, bool 
 		std::cerr << "Overwrite disabled, cannot overwrite " << filename << ". Aborting." << std::endl;
 		exit(1);
 	}
-	if (file_exists(filename.c_str()))
-	{
-		assert(remove(filename.c_str()) == 0);
-	}
+	if (file_exists(filename.c_str())) { assert(remove(filename.c_str()) == 0); }
 	if (!keep_prev && frame > 0)
 	{
-		if (file_exists(gen_filename(frame - 1, false).c_str()))
-		{
-			assert(remove(gen_filename(frame - 1, false).c_str()) == 0);
-		}
+		if (file_exists(gen_filename(frame - 1, false).c_str())) { assert(remove(gen_filename(frame - 1, false).c_str()) == 0); }
 	}
 	std::fstream outfile(filename, std::ios::out);
 	outfile.seekp(0);
@@ -333,149 +310,64 @@ void read_settings(settings &s, const char* sfile)
 			if (var.compare("read_existing") == 0)
 			{
 				cfg >> var;
-				if (var.compare("true") == 0)
-				{
-					s.read_existing = true;
-				}
-				else
-				{
-					s.read_existing = false;
-				}
+				if (var.compare("true") == 0) { s.read_existing = true; }
+				else { s.read_existing = false; }
 			}
 			else if (var.compare("use_seed") == 0)
 			{
 				cfg >> var;
-				if (var.compare("true") == 0)
-				{
-					s.use_seed = true;
-				}
-				else
-				{
-					s.use_seed = false;
-				}
+				if (var.compare("true") == 0) { s.use_seed = true; }
+				else { s.use_seed = false; }
 			}
 			else if (var.compare("display_progress") == 0)
 			{
 				cfg >> var;
-				if (var.compare("true") == 0)
-				{
-					s.display_progress = true;
-				}
-				else
-				{
-					s.display_progress = false;
-				}
+				if (var.compare("true") == 0) { s.display_progress = true; }
+				else { s.display_progress = false; }
 			}
 			else if (var.compare("dump_binary") == 0)
 			{
 				cfg >> var;
-				if (var.compare("true") == 0)
-				{
-					s.dump_binary = true;
-				}
-				else
-				{
-					s.dump_binary = false;
-				}
+				if (var.compare("true") == 0) { s.dump_binary = true; }
+				else { s.dump_binary = false; }
 			}
 			else if (var.compare("dump_plaintext") == 0)
 			{
 				cfg >> var;
-				if (var.compare("true") == 0)
-				{
-					s.dump_plaintext = true;
-				}
-				else
-				{
-					s.dump_plaintext = false;
-				}
+				if (var.compare("true") == 0) { s.dump_plaintext = true; }
+				else { s.dump_plaintext = false; }
 			}
 			else if (var.compare("overwrite_data") == 0)
 			{
 				cfg >> var;
-				if (var.compare("true") == 0)
-				{
-					s.overwrite_data = true;
-				}
-				else
-				{
-					s.overwrite_data = false;
-				}
+				if (var.compare("true") == 0) { s.overwrite_data = true; }
+				else { s.overwrite_data = false; }
 			}
 			else if (var.compare("keep_previous_binary") == 0)
 			{
 				cfg >> var;
-				if (var.compare("true") == 0)
-				{
-					s.keep_previous_binary = true;
-				}
-				else
-				{
-					s.keep_previous_binary = false;
-				}
+				if (var.compare("true") == 0) { s.keep_previous_binary = true; }
+				else { s.keep_previous_binary = false; }
 			}
 			else if (var.compare("keep_previous_text") == 0)
 			{
 				cfg >> var;
-				if (var.compare("true") == 0)
-				{
-					s.keep_previous_text = true;
-				}
-				else
-				{
-					s.keep_previous_text = false;
-				}
+				if (var.compare("true") == 0) { s.keep_previous_text = true; }
+				else { s.keep_previous_text = false; }
 			}
 			else if (var.compare("verbose") == 0)
 			{
 				cfg >> var;
-				if (var.compare("true") == 0)
-				{
-					s.verbose = true;
-				}
-				else
-				{
-					s.verbose = false;
-				}
+				if (var.compare("true") == 0) { s.verbose = true; }
+				else { s.verbose = false; }
 			}
-			else if (var.compare("num_particles") == 0)
+			else if (var.compare("adaptive") == 0)
 			{
-				cfg >> s.num_particles;
-			}
-			else if (var.compare("num_frames") == 0)
-			{
-				cfg >> s.num_frames;
-			}
-			else if (var.compare("size") == 0)
-			{
-				cfg >> s.size;
-			}
-			else if (var.compare("theta") == 0)
-			{
-				cfg >> s.theta;
-			}
-			else if (var.compare("dt") == 0)
-			{
-				cfg >> s.dt;
-			}
-			else if (var.compare("seed") == 0)
-			{
-				cfg >> s.seed;
-			}
-			else if (var.compare("min_mass") == 0)
-			{
-				cfg >> s.min_mass;
-			}
-			else if (var.compare("max_mass") == 0)
-			{
-				cfg >> s.max_mass;
-			}
-			else if (var.compare("min_vel") == 0)
-			{
-				cfg >> s.min_vel;
-			}
-			else if (var.compare("max_vel") == 0)
-			{
+<<<<<<< HEAD
+				cfg >> var;
+				if (var.compare("true") == 0) { s.adaptive = true; }
+				else { s.adaptive = false; }
+=======
 				cfg >> s.max_vel;
 			}
 			else if (var.compare("brightness") == 0 || var.compare("projection") == 0)
@@ -485,7 +377,24 @@ void read_settings(settings &s, const char* sfile)
 			else
 			{
 				std::cerr << "Unrecognized variable " << var << std::endl;
+>>>>>>> ff328857c11acab4e1513e68ad684036c2f58970
 			}
+			else if (var.compare("num_particles") == 0) { cfg >> s.num_particles; }
+			else if (var.compare("num_frames") == 0) { cfg >> s.num_frames; }
+			else if (var.compare("size") == 0) { cfg >> s.size; }
+			else if (var.compare("theta") == 0) { cfg >> s.theta; }
+			else if (var.compare("dt") == 0) { cfg >> s.dt; }
+			else if (var.compare("seed") == 0) { cfg >> s.seed; }
+			else if (var.compare("min_mass") == 0) { cfg >> s.min_mass; }
+			else if (var.compare("max_mass") == 0) { cfg >> s.max_mass; }
+			else if (var.compare("min_vel") == 0) { cfg >> s.min_vel; }
+			else if (var.compare("max_vel") == 0) { cfg >> s.max_vel; }
+			else if (var.compare("max_vel_change") == 0) { cfg >> s.max_vel_change; }
+			else if (var.compare("max_pos_change") == 0) { cfg >> s.max_pos_change; }
+			else if (var.compare("max_adaptive_fraction") == 0) { cfg >> s.max_adaptive_fraction; }
+			else if (var.compare("brightness") == 0) { cfg >> var; }
+			else if (var.compare("projection") == 0) { cfg >> var; }
+			else { std::cerr << "Unrecognized variable " << var << std::endl; }
 		}
 	}
 	else
@@ -516,11 +425,19 @@ void set_default(settings &s)
 	s.max_mass = 5e11;
 	s.min_vel = 0;
 	s.max_vel = 0;
+	s.adaptive = false;
+	s.max_vel_change = 0;
+	s.max_pos_change = 0;
+	s.max_adaptive_fraction = 0.1;
 }
 
 int main(int argc, char **argv)
 {
 	unsigned int start_frame = 0;
+	double adaptive_dt;
+	double elapsed_time = 0;
+	double frame_time = 0;
+	unsigned int frame;
 	settings config;
 	set_default(config);
 	if (argc == 1)
@@ -575,9 +492,10 @@ int main(int argc, char **argv)
 			generate_particle(config, particles, root);
 		}
 	}
-	for (unsigned int i = start_frame; i < config.num_frames; i++)
+	frame = start_frame;
+	std::cout << "Frame " << frame << "/" << config.num_frames << std::endl;
+	while (frame < config.num_frames)
 	{
-		std::cout << "Frame " << i + 1 << "/" << config.num_frames << std::endl;
 		if (config.verbose) { std::cout << "Calculating masses of nodes..." << std::endl; }
 		root -> calc_mass();
 		if (config.verbose) { std::cout << "Calculating COMs of nodes..." << std::endl; }
@@ -592,8 +510,8 @@ int main(int argc, char **argv)
 			td[i].thread_id = i;
 			td[i].particles = &particles;
 			td[i].root = root;
-			td[i].start = (config.num_particles / NUM_THREADS) * i;
-			td[i].end = (config.num_particles / NUM_THREADS) * (i + 1);
+			td[i].start = (particles.size() / NUM_THREADS) * i;
+			td[i].end = (particles.size() / NUM_THREADS) * (i + 1);
 			td[i].theta = config.theta;
 			rc = pthread_create(&threads[i], NULL, barnes_hut_thread, (void*) &td[i]);
 			if (rc)
@@ -604,7 +522,20 @@ int main(int argc, char **argv)
 		}
 #endif
 		if (config.verbose) { std::cout << "Updating particles..." << std::endl; }
-		update_all(particles, config.dt);
+		if (config.adaptive)
+		{
+			adaptive_dt = update_all(particles, config.max_vel_change, config.max_pos_change);
+			if (adaptive_dt > config.dt) { adaptive_dt = config.dt; }
+			//if (elapsed_time + adaptive_dt > frame_time + config.dt) { adaptive_dt = (frame_time + config.dt) - elapsed_time; }
+			if (adaptive_dt < config.dt * config.max_adaptive_fraction) { adaptive_dt = config.dt * config.max_adaptive_fraction; }
+			update_all(particles, adaptive_dt);
+			elapsed_time += adaptive_dt;
+			if (config.verbose) { std::cout << "Elapsed time: " << elapsed_time << std::endl; }
+		}
+		else
+		{
+			update_all(particles, config.dt);
+		}
 		if (config.verbose) { std::cout << "Checking for strays..." << std::endl; }
 		check_tree(particles, root);
 		if (config.verbose) { std::cout << "Deallocating nodes..." << std::endl; }
@@ -615,15 +546,42 @@ int main(int argc, char **argv)
 		{
 			root -> add_particle(particles[i]);
 		}
-		if (config.dump_binary)
+		if (!config.adaptive)
 		{
-			if (config.verbose) { std::cout << "Dumping binary data..." << std::endl; }
-			dump(i, particles, config.overwrite_data, config.keep_previous_binary);
+			if (config.dump_binary)
+			{
+				if (config.verbose) { std::cout << "Dumping binary data..." << std::endl; }
+				dump(frame, particles, config.overwrite_data, config.keep_previous_binary);
+			}
+			if (config.dump_plaintext)
+			{
+				if (config.verbose) { std::cout << "Dumping binary data..." << std::endl; }
+				dump_plaintext(frame, particles, config.overwrite_data, config.keep_previous_text);
+			}
+			frame++;
+			std::cout << "Frame " << frame << "/" << config.num_frames << std::endl;
 		}
-		if (config.dump_plaintext)
+		else
 		{
-			if (config.verbose) { std::cout << "Dumping plaintext data..." << std::endl; }
-			dump_plaintext(i, particles, config.overwrite_data, config.keep_previous_text);
+			
+			if (elapsed_time >= frame_time + config.dt)
+			{
+				std::cout << elapsed_time << std::endl;
+				frame_time += config.dt;
+				
+				if (config.dump_binary)
+				{
+					if (config.verbose) { std::cout << "Dumping binary data..." << std::endl; }
+					dump(frame, particles, config.overwrite_data, config.keep_previous_binary);
+				}
+				if (config.dump_plaintext)
+				{
+					if (config.verbose) { std::cout << "Dumping text data..." << std::endl; }
+					dump_plaintext(frame, particles, config.overwrite_data, config.keep_previous_text);
+				}
+				frame++;
+				std::cout << "Frame " << frame << "/" << config.num_frames << std::endl;
+			}
 		}
 	}
 	delete root;
