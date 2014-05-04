@@ -28,6 +28,10 @@ struct thread_data
 	unsigned int end;
 	double theta;
 	bool damping;
+	bool print;
+	pthread_mutex_t *lock;
+	unsigned int num_particles;
+	unsigned int *completed;
 };
 
 struct settings
@@ -260,8 +264,18 @@ void *barnes_hut_thread(void *data)
 	vector grav_to;
 	double theta = args -> theta;
 	bool damping = args -> damping;
+	double percent;
 	for (unsigned int i = (args -> start); i < (args -> end); i++)
 	{
+		if ((i - (args -> start)) % 100 == 0 && args -> print)
+		{
+			pthread_mutex_lock(args -> lock);
+			*(args -> completed) += 100;
+			percent = *(args -> completed) * 100;
+			percent /= args ->  num_particles;
+			printf("\b\b\b\b\b\b\b%3.2f%%", percent);
+			pthread_mutex_unlock(args -> lock);
+		}
 		curr = (*particles)[i];
 		curr -> set_acc_zero();
 		nodes.push(root);
@@ -570,6 +584,7 @@ int main(int argc, char **argv)
 	double elapsed_time = 0;
 	double frame_time = 0;
 	unsigned int frame;
+	unsigned int completed;
 	settings config;
 	set_default(config);
 	if (argc == 1)
@@ -601,6 +616,7 @@ int main(int argc, char **argv)
 	std::vector<particle*> particles;
 	pthread_t *threads = NULL;
 	struct thread_data *td = NULL;
+	pthread_mutex_t inc_lock;
 	int rc;
 	if (config.threaded && config.threads > 1)
 	{
@@ -642,6 +658,7 @@ int main(int argc, char **argv)
 		}
 		else
 		{
+			completed = 0;
 			for (unsigned int i = 0; i < config.threads; i++)
 			{
 				td[i].thread_id = i;
@@ -651,6 +668,10 @@ int main(int argc, char **argv)
 				td[i].end = (particles.size() / config.threads) * (i + 1);
 				td[i].theta = config.theta;
 				td[i].damping = config.damping;
+				td[i].print = config.display_progress;
+				td[i].lock = &inc_lock;
+				td[i].num_particles = particles.size();
+				td[i].completed = &completed;
 				rc = pthread_create(&threads[i], NULL, barnes_hut_thread, (void*) &td[i]);
 				if (rc)
 				{
@@ -661,6 +682,10 @@ int main(int argc, char **argv)
 			for (unsigned int i = 0; i < config.threads; i++)
 			{
 				pthread_join(threads[i], NULL);
+			}
+			if (config.display_progress)
+			{
+				printf("\b\b\b\b\b\b\b");
 			}
 		}
 		if (config.verbose) { std::cout << "Updating particles..." << std::endl; }
