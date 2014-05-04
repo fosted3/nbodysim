@@ -1,5 +1,3 @@
-//#define THREADED
-
 #define CUBE 0
 #define SPHERE 1
 #define SHELL 2
@@ -19,10 +17,6 @@
 #include <stdio.h>
 #include <fstream>
 #include <cassert>
-
-#ifdef THREADED
-
-#define NUM_THREADS 4
 #include <pthread.h>
 
 struct thread_data
@@ -33,9 +27,8 @@ struct thread_data
 	unsigned int start;
 	unsigned int end;
 	double theta;
+	bool damping;
 };
-
-#endif
 
 struct settings
 {
@@ -50,8 +43,10 @@ struct settings
 	bool verbose;
 	bool adaptive;
 	bool damping;
+	bool threaded;
 	unsigned int num_particles;
 	unsigned int num_frames;
+	unsigned int threads;
 	double size;
 	double theta;
 	double dt;
@@ -253,8 +248,6 @@ void barnes_hut(std::vector<particle*> &particles, quadtree *root, double theta,
 	}
 }
 
-#ifdef THREADED
-
 void *barnes_hut_thread(void *data)
 {
 	struct thread_data *args;
@@ -266,6 +259,7 @@ void *barnes_hut_thread(void *data)
 	std::vector<particle*> *particles = args -> particles;
 	vector grav_to;
 	double theta = args -> theta;
+	bool damping = args -> damping;
 	for (unsigned int i = (args -> start); i < (args -> end); i++)
 	{
 		curr = (*particles)[i];
@@ -284,15 +278,13 @@ void *barnes_hut_thread(void *data)
 			}
 			else
 			{
-				grav_to = gravity(curr, node);
+				grav_to = gravity(curr, node, damping);
 				curr -> set_acc_offset(&grav_to);
 			}
 		}
 	}
 	pthread_exit(NULL);
 }
-
-#endif
 
 bool file_exists(const char *filename)
 {
@@ -468,48 +460,34 @@ void read_settings(settings &s, const char* sfile)
 			{
 				cfg >> var;
 				s.gen_type = 128;
-				if (var.compare("cube") == 0)
-				{
-					s.gen_type = CUBE;
-				}
-				else if (var.compare("sphere") == 0)
-				{
-					s.gen_type = SPHERE;
-				}
-				else if (var.compare("shell") == 0)
-				{
-					s.gen_type = SHELL;
-				}
+				if (var.compare("cube") == 0) { s.gen_type = CUBE; }
+				else if (var.compare("sphere") == 0) { s.gen_type = SPHERE; }
+				else if (var.compare("shell") == 0) { s.gen_type = SHELL; }
 				assert(s.gen_type != 128);
 			}
 			else if (var.compare("mass_dist") == 0)
 			{
 				cfg >> var;
 				s.mass_dist = 128;
-				if (var.compare("linear") == 0)
-				{
-					s.mass_dist = LINEAR;
-				}
-				else if (var.compare("exp") == 0)
-				{
-					s.mass_dist = EXP;
-				}
+				if (var.compare("linear") == 0) { s.mass_dist = LINEAR; }
+				else if (var.compare("exp") == 0) { s.mass_dist = EXP; }
 				assert(s.mass_dist != 128);
 			}
 			else if (var.compare("vel_dist") == 0)
 			{
 				cfg >> var;
 				s.vel_dist = 128;
-				if (var.compare("linear") == 0)
-				{
-					s.vel_dist = LINEAR;
-				}
-				else if (var.compare("exp") == 0)
-				{
-					s.vel_dist = EXP;
-				}
+				if (var.compare("linear") == 0) { s.vel_dist = LINEAR; }
+				else if (var.compare("exp") == 0) { s.vel_dist = EXP; }
 				assert(s.vel_dist != 128);
 			}
+			else if (var.compare("threaded") == 0)
+			{
+				cfg >> var;
+				if (var.compare("true") == 0) { s.threaded = true; }
+				else { s.threaded = false; }
+			}
+			else if (var.compare("threads") == 0) { cfg >> s.threads; }
 			else if (var.compare("scale_x") == 0) { cfg >> s.scale_x; }
 			else if (var.compare("scale_y") == 0) { cfg >> s.scale_y; }
 			else if (var.compare("scale_z") == 0) { cfg >> s.scale_z; }
@@ -581,6 +559,8 @@ void set_default(settings &s)
 	s.scale_y = 1;
 	s.scale_z = 1;
 	s.damping = false;
+	s.threaded = true;
+	s.threads = 2;
 }
 
 int main(int argc, char **argv)
@@ -619,11 +599,14 @@ int main(int argc, char **argv)
 	vector origin = vector(0, 0, 0);
 	quadtree* root = new quadtree(&origin, config.size);
 	std::vector<particle*> particles;
-#ifdef THREADED
-	pthread_t threads[NUM_THREADS];
-	struct thread_data td[NUM_THREADS];
+	pthread_t *threads = NULL;
+	struct thread_data *td = NULL;
 	int rc;
-#endif
+	if (config.threaded && config.threads > 1)
+	{
+		threads = new pthread_t[config.threads];
+		td = new thread_data[config.threads];
+	}
 	if (config.read_existing)
 	{
 		start_frame = read_data(particles, root, config.num_frames);
@@ -653,26 +636,33 @@ int main(int argc, char **argv)
 		if (config.verbose) { std::cout << "Calculating COMs of nodes..." << std::endl; }
 		root -> calc_com();
 		if (config.verbose) { std::cout << "Starting Barnes-Hut algorithm..." << std::endl; }
-#ifndef THREADED
-		barnes_hut(particles, root, config.theta, config.display_progress, config.damping);
-#endif
-#ifdef THREADED
-		for (unsigned int i = 0; i < NUM_THREADS; i++)
+		if (!config.threaded || (config.threaded && config.threads == 1))
 		{
-			td[i].thread_id = i;
-			td[i].particles = &particles;
-			td[i].root = root;
-			td[i].start = (particles.size() / NUM_THREADS) * i;
-			td[i].end = (particles.size() / NUM_THREADS) * (i + 1);
-			td[i].theta = config.theta;
-			rc = pthread_create(&threads[i], NULL, barnes_hut_thread, (void*) &td[i]);
-			if (rc)
+			barnes_hut(particles, root, config.theta, config.display_progress, config.damping);
+		}
+		else
+		{
+			for (unsigned int i = 0; i < config.threads; i++)
 			{
-				std::cerr << "Could not create thread." << std::endl;
-				exit(1);
+				td[i].thread_id = i;
+				td[i].particles = &particles;
+				td[i].root = root;
+				td[i].start = (particles.size() / config.threads) * i;
+				td[i].end = (particles.size() / config.threads) * (i + 1);
+				td[i].theta = config.theta;
+				td[i].damping = config.damping;
+				rc = pthread_create(&threads[i], NULL, barnes_hut_thread, (void*) &td[i]);
+				if (rc)
+				{
+					std::cerr << "Could not create thread." << std::endl;
+					exit(1);
+				}
+			}
+			for (unsigned int i = 0; i < config.threads; i++)
+			{
+				pthread_join(threads[i], NULL);
 			}
 		}
-#endif
 		if (config.verbose) { std::cout << "Updating particles..." << std::endl; }
 		if (config.adaptive)
 		{
@@ -739,8 +729,10 @@ int main(int argc, char **argv)
 	{
 		delete particles[i];
 	}
-#ifdef THREADED
-	pthread_exit(NULL);
-#endif
+	if (config.threaded && config.threads > 1)
+	{
+		delete[] threads;
+		delete[] td;
+	}
 	return 0;
 }
