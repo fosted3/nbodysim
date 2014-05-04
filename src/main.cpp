@@ -135,7 +135,7 @@ void generate_particle(settings &s, std::vector<particle*> &particles, quadtree 
 		if (s.gen_type == SPHERE)
 		{
 			radius = random_double(0, 1, LINEAR);
-			radius = sqrt(radius) * s.r_sphere;		
+			radius = sqrt(radius) * s.r_sphere;
 		}
 		else if (s.gen_type == SHELL)
 		{
@@ -307,7 +307,7 @@ std::string gen_filename(unsigned int frame, bool binary)
 	filename.insert(0, "./data/");
 	if (binary) { filename += ".dat"; }
 	else { filename += ".txt"; }
-	return filename;	
+	return filename;
 }
 
 void dump(unsigned int frame, std::vector<particle*> &particles, bool overwrite, bool keep_prev)
@@ -508,7 +508,7 @@ void read_settings(settings &s, const char* sfile)
 				{
 					s.vel_dist = EXP;
 				}
-				assert(s.vel_dist != 128);			
+				assert(s.vel_dist != 128);
 			}
 			else if (var.compare("scale_x") == 0) { cfg >> s.scale_x; }
 			else if (var.compare("scale_y") == 0) { cfg >> s.scale_y; }
@@ -707,7 +707,7 @@ int main(int argc, char **argv)
 			}
 			if (config.dump_plaintext)
 			{
-				if (config.verbose) { std::cout << "Dumping binary data..." << std::endl; }
+				if (config.verbose) { std::cout << "Dumping text data..." << std::endl; }
 				dump_plaintext(frame, particles, config.overwrite_data, config.keep_previous_text);
 			}
 			frame++;
@@ -715,12 +715,10 @@ int main(int argc, char **argv)
 		}
 		else
 		{
-			
 			if (elapsed_time >= frame_time + config.dt)
 			{
 				std::cout << elapsed_time << std::endl;
 				frame_time += config.dt;
-				
 				if (config.dump_binary)
 				{
 					if (config.verbose) { std::cout << "Dumping binary data..." << std::endl; }
