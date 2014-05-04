@@ -49,6 +49,7 @@ struct settings
 	bool keep_previous_text;
 	bool verbose;
 	bool adaptive;
+	bool damping;
 	unsigned int num_particles;
 	unsigned int num_frames;
 	double size;
@@ -192,12 +193,20 @@ double update_all(std::vector<particle*> &particles, double max_vel_change, doub
 	return dt;
 }
 
-vector gravity(particle* par, quadtree* node)
+vector gravity(particle* par, quadtree* node, bool damping)
 {
 	if (par == node -> get_particle()) { return vector(0, 0, 0); }
 	vector acc = *(node -> get_com());
 	acc -= *(par -> get_pos());
-	double r_sq = pow(acc.magnitude(), -2);
+	double r_sq;
+	if (!damping)
+	{
+		r_sq = pow(acc.magnitude(), -2);
+	}
+	else
+	{
+		r_sq = 1.0 / (pow(acc.magnitude(), 2) + exp(-1 * acc.magnitude()));
+	}
 	acc.normalize();
 	acc *= node -> get_mass();
 	acc *= 6.67384e-11;
@@ -205,7 +214,7 @@ vector gravity(particle* par, quadtree* node)
 	return acc;
 }
 
-void barnes_hut(std::vector<particle*> &particles, quadtree *root, double theta, bool print)
+void barnes_hut(std::vector<particle*> &particles, quadtree *root, double theta, bool print, bool damping)
 {
 	std::queue<quadtree*> nodes;
 	quadtree* node;
@@ -236,7 +245,7 @@ void barnes_hut(std::vector<particle*> &particles, quadtree *root, double theta,
 			}
 			else
 			{
-				grav_to = gravity(curr, node);
+				grav_to = gravity(curr, node, damping);
 				curr -> set_acc_offset(&grav_to);
 			}
 		}
@@ -439,6 +448,12 @@ void read_settings(settings &s, const char* sfile)
 				if (var.compare("true") == 0) { s.adaptive = true; }
 				else { s.adaptive = false; }
 			}
+			else if (var.compare("damping") == 0)
+			{
+				cfg >> var;
+				if (var.compare("true") == 0) { s.damping = true; }
+				else { s.damping = false; }
+			}
 			else if (var.compare("rotation_vector") == 0)
 			{
 				double x;
@@ -565,6 +580,7 @@ void set_default(settings &s)
 	s.scale_x = 1;
 	s.scale_y = 1;
 	s.scale_z = 1;
+	s.damping = false;
 }
 
 int main(int argc, char **argv)
@@ -638,7 +654,7 @@ int main(int argc, char **argv)
 		root -> calc_com();
 		if (config.verbose) { std::cout << "Starting Barnes-Hut algorithm..." << std::endl; }
 #ifndef THREADED
-		barnes_hut(particles, root, config.theta, config.display_progress);
+		barnes_hut(particles, root, config.theta, config.display_progress, config.damping);
 #endif
 #ifdef THREADED
 		for (unsigned int i = 0; i < NUM_THREADS; i++)
