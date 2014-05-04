@@ -3,6 +3,9 @@
 #define CUBE 0
 #define SPHERE 1
 #define SHELL 2
+#define LINEAR 0
+#define EXP 1
+#define NORMAL 2
 
 #include "vector.h"
 #include "particle.h"
@@ -61,36 +64,68 @@ struct settings
 	double min_adaptive_dt;
 	double r_sphere;
 	double rotation_magnitude;
+	double scale_x;
+	double scale_y;
+	double scale_z;
 	vector rotation_vector;
 	unsigned int gen_type;
+	unsigned int mass_dist;
+	unsigned int vel_dist;
 };
 
-double random_double(double low, double high)
+double clamp(double min, double x, double max)
 {
+	if (x < min)
+	{
+		return min;
+	}
+	if (x > max)
+	{
+		return max;
+	}
+	return x;
+}
+
+double random_double(double low, double high, unsigned int dist)
+{
+	assert(dist == LINEAR || dist == EXP);
 	double r = rand();
 	r /= RAND_MAX;
-	r *= high - low;
-	r += low;
+	if (dist == LINEAR)
+	{
+		r *= high - low;
+		r += low;
+	}
+	else if (dist == EXP)
+	{
+		r = log(r) * -0.5 * (high - low);
+		r = clamp(low, r, high);
+	}
 	return r;
 }
 
 vector random_vector(double low, double high)
 {
-	vector rv = vector(random_double(low, high), random_double(low, high), random_double(low, high));
+	vector rv = vector(random_double(low, high, LINEAR), random_double(low, high, LINEAR), random_double(low, high, LINEAR));
 	return rv;
 }
 
 void generate_particle(settings &s, std::vector<particle*> &particles, quadtree *root)
 {
 	vector null = vector(0, 0, 0);
-	double mass = random_double(s.min_mass, s.max_mass);
+	double mass = random_double(s.min_mass, s.max_mass, s.mass_dist);
+	assert(mass != -1);
 	particle *par = NULL;
+	assert(s.scale_x >= 0 && s.scale_x <= 1);
+	assert(s.scale_y >= 0 && s.scale_y <= 1);
+	assert(s.scale_z >= 0 && s.scale_z <= 1);
 	if (s.gen_type == CUBE)
 	{
 		vector temp = random_vector(-1*(s.size/2), s.size/2);
+		temp.scale(s.scale_x, s.scale_y, s.scale_z);
 		vector vel = random_vector(-1, 1);
 		vel.normalize();
-		vel *= random_double(s.min_vel, s.max_vel);
+		vel *= random_double(s.min_vel, s.max_vel, s.vel_dist);
 		par = new particle(&temp, &vel, &null, mass);
 	}
 	else if (s.gen_type == SPHERE || s.gen_type == SHELL)
@@ -98,7 +133,7 @@ void generate_particle(settings &s, std::vector<particle*> &particles, quadtree 
 		double radius = -1;
 		if (s.gen_type == SPHERE)
 		{
-			radius = random_double(0, 1);
+			radius = random_double(0, 1, LINEAR);
 			radius = sqrt(radius) * s.r_sphere;		
 		}
 		else if (s.gen_type == SHELL)
@@ -106,9 +141,10 @@ void generate_particle(settings &s, std::vector<particle*> &particles, quadtree 
 			radius = s.r_sphere;
 		}
 		assert(radius != -1);
-		double theta = random_double(0, 6.28318530718);
-		double azimuth = acos(random_double(-1, 1));
+		double theta = random_double(0, 6.28318530718, LINEAR);
+		double azimuth = acos(random_double(-1, 1, LINEAR));
 		vector point = vector(radius * sin(azimuth) * cos(theta), radius * sin(azimuth) * sin(theta), radius * cos(azimuth));
+		point.scale(s.scale_x, s.scale_y, s.scale_z);
 		vector rotation = s.rotation_vector;
 		rotation.normalize();
 		rotation *= s.rotation_magnitude;
@@ -431,6 +467,37 @@ void read_settings(settings &s, const char* sfile)
 				}
 				assert(s.gen_type != 128);
 			}
+			else if (var.compare("mass_dist") == 0)
+			{
+				cfg >> var;
+				s.mass_dist = 128;
+				if (var.compare("linear") == 0)
+				{
+					s.mass_dist = LINEAR;
+				}
+				else if (var.compare("exp") == 0)
+				{
+					s.mass_dist = EXP;
+				}
+				assert(s.mass_dist != 128);
+			}
+			else if (var.compare("vel_dist") == 0)
+			{
+				cfg >> var;
+				s.vel_dist = 128;
+				if (var.compare("linear") == 0)
+				{
+					s.vel_dist = LINEAR;
+				}
+				else if (var.compare("exp") == 0)
+				{
+					s.vel_dist = EXP;
+				}
+				assert(s.vel_dist != 128);			
+			}
+			else if (var.compare("scale_x") == 0) { cfg >> s.scale_x; }
+			else if (var.compare("scale_y") == 0) { cfg >> s.scale_y; }
+			else if (var.compare("scale_z") == 0) { cfg >> s.scale_z; }
 			else if (var.compare("r_sphere") == 0) { cfg >> s.r_sphere; }
 			else if (var.compare("rotation_magnitude") == 0) { cfg >> s.rotation_magnitude; }
 			else if (var.compare("num_particles") == 0) { cfg >> s.num_particles; }
@@ -493,6 +560,11 @@ void set_default(settings &s)
 	s.rotation_magnitude = 0.1;
 	s.rotation_vector = vector(0, 0, 1);
 	s.gen_type = CUBE;
+	s.mass_dist = LINEAR;
+	s.vel_dist = LINEAR;
+	s.scale_x = 1;
+	s.scale_y = 1;
+	s.scale_z = 1;
 }
 
 int main(int argc, char **argv)

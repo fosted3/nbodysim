@@ -20,6 +20,7 @@ class vector
 		double get_z(void);
 		double magnitude(void);
 		void normalize(void);
+		void scale(double, double, double);
 	private:
 		double x;
 		double y;
