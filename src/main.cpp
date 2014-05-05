@@ -38,7 +38,7 @@ struct settings
 	bool use_seed;
 	bool display_progress;
 	bool dump_binary;
-	bool dump_plaintext;
+	bool dump_text;
 	bool overwrite_data;
 	bool keep_previous_binary;
 	bool keep_previous_text;
@@ -75,9 +75,10 @@ struct file_write_data
 	std::vector<particle*> *particles;
 	unsigned int frame;
 	bool binary;
+	bool text;
 	bool overwrite;
-	bool keep_prev;
-	volatile bool *done;
+	bool keep_prev_binary;
+	bool keep_prev_text;
 };
 
 struct update_data
@@ -303,44 +304,57 @@ void *dump(void *data)
 {
 	struct file_write_data *args;
 	args = (struct file_write_data*) data;
-	*(args -> done) = false;
 	unsigned int size = sizeof(particle);
 	unsigned int frame = args -> frame;
 	bool overwrite = args -> overwrite;
-	bool keep_prev = args -> keep_prev;
+	bool keep_prev_binary = args -> keep_prev_binary;
+	bool keep_prev_text = args -> keep_prev_text;
 	bool binary = args -> binary;
+	bool text = args -> text;
 	std::vector<particle*> *particles = args -> particles;
-	std::string filename = gen_filename(frame, binary);
-	if (!overwrite && file_exists(filename.c_str()))
+	std::string bfilename = gen_filename(frame, true);
+	std::string tfilename = gen_filename(frame, false);
+	if (!overwrite && file_exists(bfilename.c_str()))
 	{
-		std::cerr << "Overwrite disabled, cannot overwrite " << filename << ". Aborting." << std::endl;
+		std::cerr << "Overwrite disabled, cannot overwrite " << bfilename << ". Aborting." << std::endl;
 		exit(1);
 	}
-	if (file_exists(filename.c_str())) { assert(remove(filename.c_str()) == 0); }
-	if (!keep_prev && frame > 0)
+	if (!overwrite && file_exists(tfilename.c_str()))
+	{
+		std::cerr << "Overwrite disabled, cannot overwrite " << tfilename << ". Aborting." << std::endl;
+		exit(1);
+	}
+	if (file_exists(bfilename.c_str())) { assert(remove(bfilename.c_str()) == 0); }
+	if (file_exists(tfilename.c_str())) { assert(remove(tfilename.c_str()) == 0); }
+	if (!keep_prev_binary && frame > 0)
 	{
 		if (file_exists(gen_filename(frame - 1, true).c_str())) { assert(remove(gen_filename(frame - 1, true).c_str()) == 0); }
 	}
+	if (!keep_prev_text && frame > 0)
+	{
+		if (file_exists(gen_filename(frame - 1, false).c_str())) { assert(remove(gen_filename(frame - 1, false).c_str()) == 0); }
+	}
 	if (binary)
 	{
-		std::fstream outfile(filename, std::ios::out | std::ios::binary);
-		outfile.seekp(0);
-		for (unsigned int i = 0; i < particles -> size(); i++) { outfile.write((char*)(*particles)[i], size); }
-		outfile.close();
+		std::fstream boutfile(bfilename, std::ios::out | std::ios::binary);
+		boutfile.seekp(0);
+		for (unsigned int i = 0; i < particles -> size(); i++) { boutfile.write((char*)(*particles)[i], size); }
+		boutfile.flush();
+		boutfile.close();
 	}
-	else
+	if (text)
 	{
 		vector temp;
-		std::fstream outfile(filename, std::ios::out);
-		outfile.seekp(0);
+		std::fstream toutfile(tfilename, std::ios::out);
+		toutfile.seekp(0);
 		for (unsigned int i = 0; i < particles -> size(); i++)
 		{
 			temp = *((*particles)[i] -> get_pos());
-			outfile << temp.get_x() << ", " << temp.get_y() << ", " << temp.get_z() << "\n";
+			toutfile << temp.get_x() << ", " << temp.get_y() << ", " << temp.get_z() << "\n";
 		}
-		outfile.close();
+		toutfile.flush();
+		toutfile.close();
 	}
-	*(args -> done) = true;
 	pthread_exit(NULL);
 }
 
@@ -402,11 +416,11 @@ void read_settings(settings &s, const char* sfile)
 				if (var.compare("true") == 0) { s.dump_binary = true; }
 				else { s.dump_binary = false; }
 			}
-			else if (var.compare("dump_plaintext") == 0)
+			else if (var.compare("dump_text") == 0)
 			{
 				cfg >> var;
-				if (var.compare("true") == 0) { s.dump_plaintext = true; }
-				else { s.dump_plaintext = false; }
+				if (var.compare("true") == 0) { s.dump_text = true; }
+				else { s.dump_text = false; }
 			}
 			else if (var.compare("overwrite_data") == 0)
 			{
@@ -522,7 +536,7 @@ void set_default(settings &s)
 	s.use_seed = false;
 	s.display_progress = true;
 	s.dump_binary = false;
-	s.dump_plaintext = true;
+	s.dump_text = true;
 	s.overwrite_data = false;
 	s.keep_previous_binary = false;
 	s.keep_previous_text = true;
@@ -561,9 +575,8 @@ int main(int argc, char **argv)
 	double elapsed_time = 0;
 	double frame_time = 0;
 	unsigned int frame = 0;
-	volatile bool bdone = true;
-	volatile bool tdone = true;
 	int rc = 0;
+	bool first = true;
 	settings config;
 	set_default(config);
 	if (argc == 1)
@@ -595,10 +608,8 @@ int main(int argc, char **argv)
 	pthread_t *threads = new pthread_t[config.threads];
 	struct thread_data *td = new thread_data[config.threads];
 	struct update_data *ud = new update_data[config.threads];
-	pthread_t file_threads[2];
-	file_threads[0] = 0;
-	file_threads[1] = 0;
-	struct file_write_data fd[2];
+	pthread_t file_thread;
+	struct file_write_data fd;
 	if (config.read_existing)
 	{
 		start_frame = read_data(particles, root, config.num_frames);
@@ -656,15 +667,13 @@ int main(int argc, char **argv)
 		{
 			printf("\b\b\b\b\b\b\b");
 		}
-		if (!tdone)
+		if (first)
 		{
-			std::cout << "Waiting for text file to finish writing..." << std::endl;
-			while (!tdone) { }
+			first = false;
 		}
-		if (!bdone)
+		else
 		{
-			std::cout << "Waiting for binary file to finish writing..." << std::endl;
-			while (!bdone) { }
+			pthread_join(file_thread, NULL);
 		}
 		if (config.verbose) { std::cout << "Updating particles..." << std::endl; }
 		if (config.adaptive)
@@ -710,32 +719,17 @@ int main(int argc, char **argv)
 		}
 		if (!config.adaptive)
 		{
-			if (config.dump_binary)
+			if (config.dump_binary || config.dump_text)
 			{
-				if (config.verbose) { std::cout << "Dumping binary data..." << std::endl; }
-				fd[0].particles = &particles;
-				fd[0].frame = frame;
-				fd[0].binary = true;
-				fd[0].overwrite = config.overwrite_data;
-				fd[0].keep_prev = config.keep_previous_binary;
-				fd[0].done = &bdone;
-				rc = pthread_create(&file_threads[0], NULL, dump, (void*) &fd[0]);
-				if (rc)
-				{
-					std::cerr << "Could not create thread." << std::endl;
-					exit(1);
-				}
-			}
-			if (config.dump_plaintext)
-			{
-				if (config.verbose) { std::cout << "Dumping text data..." << std::endl; }
-				fd[1].particles = &particles;
-				fd[1].frame = frame;
-				fd[1].binary = false;
-				fd[1].overwrite = config.overwrite_data;
-				fd[1].keep_prev = config.keep_previous_text;
-				fd[1].done = &tdone;
-				rc = pthread_create(&file_threads[1], NULL, dump, (void*) &fd[1]);
+				if (config.verbose) { std::cout << "Dumping data..." << std::endl; }
+				fd.particles = &particles;
+				fd.frame = frame;
+				fd.binary = config.dump_binary;
+				fd.text = config.dump_text;
+				fd.overwrite = config.overwrite_data;
+				fd.keep_prev_binary = config.keep_previous_binary;
+				fd.keep_prev_text = config.keep_previous_text;
+				rc = pthread_create(&file_thread, NULL, dump, (void*) &fd);
 				if (rc)
 				{
 					std::cerr << "Could not create thread." << std::endl;
@@ -751,32 +745,17 @@ int main(int argc, char **argv)
 			{
 				std::cout << elapsed_time << std::endl;
 				frame_time += config.dt;
-				if (config.dump_binary)
+				if (config.dump_binary || config.dump_text)
 				{
-					if (config.verbose) { std::cout << "Dumping binary data..." << std::endl; }
-					fd[0].particles = &particles;
-					fd[0].frame = frame;
-					fd[0].binary = true;
-					fd[0].overwrite = config.overwrite_data;
-					fd[0].keep_prev = config.keep_previous_binary;
-					fd[0].done = &bdone;
-					rc = pthread_create(&file_threads[0], NULL, dump, (void*) &fd[0]);
-					if (rc)
-					{
-						std::cerr << "Could not create thread." << std::endl;
-						exit(1);
-					}
-				}
-				if (config.dump_plaintext)
-				{
-					if (config.verbose) { std::cout << "Dumping text data..." << std::endl; }
-					fd[1].particles = &particles;
-					fd[1].frame = frame;
-					fd[1].binary = false;
-					fd[1].overwrite = config.overwrite_data;
-					fd[1].keep_prev = config.keep_previous_text;
-					fd[1].done = &tdone;
-					rc = pthread_create(&file_threads[1], NULL, dump, (void*) &fd[1]);
+					if (config.verbose) { std::cout << "Dumping data..." << std::endl; }
+					fd.particles = &particles;
+					fd.frame = frame;
+					fd.binary = config.dump_binary;
+					fd.text = config.dump_text;
+					fd.overwrite = config.overwrite_data;
+					fd.keep_prev_binary = config.keep_previous_binary;
+					fd.keep_prev_text = config.keep_previous_text;
+					rc = pthread_create(&file_thread, NULL, dump, (void*) &fd);
 					if (rc)
 					{
 						std::cerr << "Could not create thread." << std::endl;
@@ -788,16 +767,7 @@ int main(int argc, char **argv)
 			}
 		}
 	}
-	if (!tdone)
-	{
-		std::cout << "Waiting for text file to finish writing..." << std::endl;
-		while (!tdone) { }
-	}
-	if (!bdone)
-	{
-		std::cout << "Waiting for binary file to finish writing..." << std::endl;
-		while (!bdone) { }
-	}
+	pthread_join(file_thread, NULL);
 	delete root;
 	for (unsigned int i = 0; i < particles.size(); i++)
 	{
