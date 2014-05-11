@@ -105,17 +105,22 @@ double clamp(double min, double x, double max)
 double random_double(double low, double high, unsigned int dist)
 {
 	assert(dist == LINEAR || dist == EXP);
-	double r = rand();
-	r /= RAND_MAX;
+	double r;
 	if (dist == LINEAR)
 	{
+		r = rand();
+		r /= RAND_MAX;
 		r *= high - low;
 		r += low;
 	}
 	else if (dist == EXP)
 	{
-		r = log(r) * -0.5 * (high - low);
-		r = clamp(low, r, high);
+		do
+		{
+			r = rand();
+			r /= RAND_MAX;
+			r = log(r) * -0.5 * (high - low);
+		} while (r > high || r < low);
 	}
 	return r;
 }
