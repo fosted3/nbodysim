@@ -554,6 +554,9 @@ void read_settings(settings &s, const char* sfile)
 			else if (var.compare("min_adaptive_dt") == 0) { cfg >> s.min_adaptive_dt; }
 			else if (var.compare("brightness") == 0) { cfg >> var; }
 			else if (var.compare("projection") == 0) { cfg >> var; }
+			else if (var.compare("img_w") == 0) { cfg >> var; }
+			else if (var.compare("img_h") == 0) { cfg >> var; }
+			else if (var.compare("scale") == 0) { cfg >> var; }
 			else { std::cerr << "Unrecognized variable " << var << std::endl; }
 		}
 	}

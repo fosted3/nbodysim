@@ -1,5 +1,6 @@
 from PIL import Image
 from math import sqrt
+from numpy import zeros
 import os.path
 import sys
 
@@ -18,8 +19,8 @@ def get_tuple(line):
 	temp[2] = float(temp[2])
 	return tuple(temp)
 
-def inc_tuple(tup, inc):
-	return (clamp(0, tup[0] + inc, 255), clamp(0, tup[1] + inc, 255), clamp(0, tup[2] + inc, 255))
+#def inc_tuple(tup, inc):
+#	return (clamp(0, tup[0] + inc, 255), clamp(0, tup[1] + inc, 255), clamp(0, tup[2] + inc, 255))
 
 def gen_data(frame):
 	fname = str(frame)
@@ -35,30 +36,40 @@ def gen_image(frame):
 	fname = "img/" + fname + ".png"
 	return fname
 	
-def render(frame, size, inc, proj):
+def render(frame, img_w, img_h, inc, proj, scale):
 	if (os.path.isfile(gen_image(frame))):
 		return True
 	try:
 		data = open(gen_data(frame), 'r')
 	except:
 		return False
-	if (proj == "front"):
-		im = Image.new("RGB", (size, size))
-	elif (proj == "iso"):
-		im = Image.new("RGB", (size * 2, size * 2))
+	print("Rendering " + gen_data(frame))
+	if (proj == "front" or proj == "iso"):
+		im = Image.new("RGB", (img_w, img_h))
+		arr = zeros((img_w, img_h))
 	else:
 		print("Unknown projection " + proj)
 		raise sys.exit()
+	if (proj == "iso"):
+		scale *= 2.0
 	pix = im.load()
 	for line in data:
 		temp = get_tuple(line)
 		if (proj == "front"):
-			x = clamp(0, int(temp[0] + size/2), size - 1)
-			y = clamp(0, int(temp[1] + size/2), size - 1)
+			x = temp[0] + img_w/2
+			y = temp[1] + img_h/2
 		elif (proj == "iso"):
-			x = clamp(0, int((sqrt(3) / 2.0) * (temp[0] - temp[1]) + size), (size * 2) - 1)
-			y = clamp(0, int((-0.5) * (temp[0] + temp[1] + 2 * temp[2]) + size), (size * 2) - 1)
-		pix[x, y] = inc_tuple(pix[x, y], inc)
+			x = ((sqrt(3) / 2.0) * (temp[0] - temp[1]) + img_w) / 2.0
+			y = ((-0.5) * (temp[0] + temp[1] + 2 * temp[2]) + img_h) / 2.0
+		x += (x - (img_w / 2)) * (scale - 1)
+		y += (y - (img_h / 2)) * (scale - 1)
+		x = int(clamp(0, x, img_w - 1))
+		y = int(clamp(0, y, img_h - 1))
+		arr[x, y] += inc
+	for x in range(0, img_w):
+		for y in range(0, img_h):
+			v = int(clamp(0, arr[x, y], 255))
+			pix[x, y] = (v, v, v)
 	print("Saving " + gen_image(frame))
 	im.save(gen_image(frame))
 	return True
@@ -69,7 +80,9 @@ if (len(sys.argv) != 2):
 	raise sys.exit()
 
 frame = 0
-size = -1
+img_w = -1
+img_h = -1
+scale = 1
 inc = 255
 proj = "iso"
 conf = sys.argv[1]
@@ -77,11 +90,15 @@ config = open(conf, 'r')
 for line in config:
 	pair = line.split()
 	if (len(pair) == 2):
-		if (pair[0] == "size"):
-			size = int(pair[1])
+		if (pair[0] == "img_w"):
+			img_w = int(pair[1])
+		if (pair[0] == "img_h"):
+			img_h = int(pair[1])
 		if (pair[0] == "projection"):
 			proj = pair[1]
 		if (pair[0] == "brightness"):
-			inc = int(pair[1])
-while (render(frame, size, inc, proj)):
+			inc = float(pair[1])
+		if (pair[0] == "scale"):
+			scale = float(pair[1])
+while (render(frame, img_w, img_h, inc, proj, scale)):
 	frame += 1
