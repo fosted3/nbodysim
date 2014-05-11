@@ -1,18 +1,18 @@
-#ifndef quadtree_h_
-#define quadtree_h_
+#ifndef octree_h_
+#define octree_h_
 
 #include "vector.h"
 #include "particle.h"
 
 class particle;
 
-class quadtree
+class octree
 {
 	public:
-		quadtree();
-		quadtree(vector*, double, quadtree*); //center, side, parent
-		quadtree(vector*, double);
-		~quadtree();
+		octree();
+		octree(vector*, double, octree*); //center, side, parent
+		octree(vector*, double);
+		~octree();
 		void add_particle(particle*);
 		void allocate_child(int);
 		void print_info(void);
@@ -23,16 +23,16 @@ class quadtree
 		vector* get_com(void);
 		bool inside(particle*);
 		void release_particle(void);
-		quadtree* get_parent(void);
+		octree* get_parent(void);
 		double get_side(void);
-		quadtree* get_child(int);
+		octree* get_child(int);
 		particle* get_particle(void);
 	private:
-		quadtree* parent;
+		octree* parent;
 		vector center;
 		vector com;
 		double side;
-		quadtree *children[8];
+		octree *children[8];
 		particle* p;
 		double mass;
 };

@@ -7,7 +7,7 @@
 
 #include "vector.h"
 #include "particle.h"
-#include "quadtree.h"
+#include "octree.h"
 #include <vector>
 #include <stdlib.h>
 #include <time.h>
@@ -23,7 +23,7 @@ struct thread_data
 {
 	int thread_id;
 	std::vector<particle*> *particles;
-	quadtree *root;
+	octree *root;
 	unsigned int start;
 	unsigned int end;
 	double theta;
@@ -126,7 +126,7 @@ vector random_vector(double low, double high)
 	return rv;
 }
 
-void generate_particle(settings &s, std::vector<particle*> &particles, quadtree *root)
+void generate_particle(settings &s, std::vector<particle*> &particles, octree *root)
 {
 	vector null = vector(0, 0, 0);
 	double mass = random_double(s.min_mass, s.max_mass, s.mass_dist);
@@ -172,7 +172,7 @@ void generate_particle(settings &s, std::vector<particle*> &particles, quadtree 
 	root -> add_particle(par);
 }
 
-void check_tree(std::vector<particle*> &particles, quadtree *root)
+void check_tree(std::vector<particle*> &particles, octree *root)
 {
 	for (unsigned int i = 0; i < particles.size(); i++)
 	{
@@ -216,7 +216,7 @@ double update_all(std::vector<particle*> &particles, double max_vel_change, doub
 	return dt;
 }
 
-vector gravity(particle* par, quadtree* node, bool damping)
+vector gravity(particle* par, octree* node, bool damping)
 {
 	if (par == node -> get_particle()) { return vector(0, 0, 0); }
 	vector acc = *(node -> get_com());
@@ -241,9 +241,9 @@ void *barnes_hut_thread(void *data)
 {
 	struct thread_data *args;
 	args = (struct thread_data*) data;
-	std::queue<quadtree*> nodes;
-	quadtree* node;
-	quadtree* root = args -> root;
+	std::queue<octree*> nodes;
+	octree* node;
+	octree* root = args -> root;
 	particle* curr;
 	std::vector<particle*> *particles = args -> particles;
 	vector grav_to;
@@ -358,7 +358,7 @@ void *dump(void *data)
 	pthread_exit(NULL);
 }
 
-unsigned int read_data(std::vector<particle*> &particles, quadtree *root, unsigned int num_frames)
+unsigned int read_data(std::vector<particle*> &particles, octree *root, unsigned int num_frames)
 {
 	assert (particles.size() == 0);
 	unsigned int size = sizeof(particle);
@@ -603,7 +603,7 @@ int main(int argc, char **argv)
 	}
 	srand(seed);
 	vector origin = vector(0, 0, 0);
-	quadtree* root = new quadtree(&origin, config.size);
+	octree* root = new octree(&origin, config.size);
 	std::vector<particle*> particles;
 	pthread_t *threads = new pthread_t[config.threads];
 	struct thread_data *td = new thread_data[config.threads];
@@ -712,7 +712,7 @@ int main(int argc, char **argv)
 		if (config.verbose) { std::cout << "Deallocating nodes..." << std::endl; }
 		delete root;
 		if (config.verbose) { std::cout << "Regenerating nodes..." << std::endl; }
-		root = new quadtree(&origin, config.size);
+		root = new octree(&origin, config.size);
 		for (unsigned int i = 0; i < particles.size(); i++)
 		{
 			root -> add_particle(particles[i]);

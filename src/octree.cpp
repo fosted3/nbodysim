@@ -1,15 +1,15 @@
-#include "quadtree.h"
+#include "octree.h"
 #include <cstddef>
 #include <cassert>
 #include <iostream>
 //#include <stdlib.h>
 //#include <cmath>
 
-quadtree::quadtree()
+octree::octree()
 {
 }
 
-quadtree::quadtree(vector *cen, double sid, quadtree *par)
+octree::octree(vector *cen, double sid, octree *par)
 {
 	this -> center = *cen;
 	this -> side = sid;
@@ -21,7 +21,7 @@ quadtree::quadtree(vector *cen, double sid, quadtree *par)
 	this -> p = NULL;
 }
 
-quadtree::quadtree(vector *cen, double sid)
+octree::octree(vector *cen, double sid)
 {
 	this -> center = *cen;
 	this -> side = sid;
@@ -33,7 +33,7 @@ quadtree::quadtree(vector *cen, double sid)
 	this -> p = NULL;
 }
 
-void quadtree::allocate_child(int i)
+void octree::allocate_child(int i)
 {	/*
 	 z  y  x  i
 	-1 -1 -1  0
@@ -63,10 +63,10 @@ void quadtree::allocate_child(int i)
 	assert(this -> children[i] == NULL);
 	vector temp = this -> center;
 	temp += vector(x * half / 2, y * half / 2, z * half / 2);
-	children[i] = new quadtree(&temp, half, this);
+	children[i] = new octree(&temp, half, this);
 }
 
-quadtree::~quadtree()
+octree::~octree()
 {
 	for (int i = 0; i < 8; i++)
 	{
@@ -81,9 +81,9 @@ quadtree::~quadtree()
 	}*/
 }
 
-void quadtree::print_info(void)
+void octree::print_info(void)
 {
-	std::cout << "Quadtree node @ " << this << ", center @ ";
+	std::cout << "octree node @ " << this << ", center @ ";
 	this -> center.print_inline();
 	std::cout << ", size of " << this -> side;
 	if (this -> p != NULL)
@@ -97,7 +97,7 @@ void quadtree::print_info(void)
 	}
 }	
 
-void quadtree::print_info(int depth)
+void octree::print_info(int depth)
 {
 	for (int i = 0; i < depth; i++)
 	{
@@ -113,7 +113,7 @@ void quadtree::print_info(int depth)
 	}
 }
 
-void quadtree::add_particle(particle *par)
+void octree::add_particle(particle *par)
 {
 	if (!this -> inside(par))
 	{
@@ -182,12 +182,12 @@ void quadtree::add_particle(particle *par)
 	}
 }
 
-double quadtree::get_mass(void)
+double octree::get_mass(void)
 {
 	return this -> mass;
 }
 
-void quadtree::calc_mass(void) //call on root
+void octree::calc_mass(void) //call on root
 {
 	if (this -> p == NULL)
 	{
@@ -207,7 +207,7 @@ void quadtree::calc_mass(void) //call on root
 	}
 }
 
-void quadtree::calc_com(void) //call on root
+void octree::calc_com(void) //call on root
 {
 	if (this -> p != NULL)
 	{
@@ -232,12 +232,12 @@ void quadtree::calc_com(void) //call on root
 	//this -> com.print();
 }
 
-vector* quadtree::get_com(void)
+vector* octree::get_com(void)
 {
 	return &(this -> com);
 }
 
-bool quadtree::inside(particle* par)
+bool octree::inside(particle* par)
 {
 	vector *temp = par -> get_pos();
 	if ((temp -> get_x() - this -> center.get_x()) > ((this -> side) / 2.0) || (temp -> get_x() - this -> center.get_x()) < ((-1.0 * this -> side) / 2.0))
@@ -255,27 +255,27 @@ bool quadtree::inside(particle* par)
 	return true;
 }
 
-void quadtree::release_particle(void)
+void octree::release_particle(void)
 {
 	this -> p = NULL;
 }
 
-quadtree* quadtree::get_parent(void)
+octree* octree::get_parent(void)
 {
 	return this -> parent;
 }
 
-double quadtree::get_side(void)
+double octree::get_side(void)
 {
 	return this -> side;
 }
 
-quadtree* quadtree::get_child(int i)
+octree* octree::get_child(int i)
 {
 	return (this -> children[i]);
 }
 
-particle* quadtree::get_particle(void)
+particle* octree::get_particle(void)
 {
 	return this -> p;
 }

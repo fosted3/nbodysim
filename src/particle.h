@@ -2,9 +2,6 @@
 #define particle_h_
 
 #include "vector.h"
-#include "quadtree.h"
-
-class quadtree;
 
 class particle
 {
