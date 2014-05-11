@@ -602,6 +602,16 @@ void set_default(settings &s)
 	s.threads = 1;
 }
 
+void create_thread(pthread_t *thread, const pthread_attr_t *attr, void *(*start_routine) (void *), void *arg)
+{
+	int rc = pthread_create(thread, attr, start_routine, arg);
+	if (rc)
+	{
+		std::cerr << "Could not create thread." << std::endl;
+		exit(1);
+	}
+}
+
 int main(int argc, char **argv)
 {
 	unsigned int start_frame = 0;
@@ -609,7 +619,6 @@ int main(int argc, char **argv)
 	double elapsed_time = 0;
 	double frame_time = 0;
 	unsigned int frame = 0;
-	int rc = 0;
 	bool first = true;
 	settings config;
 	set_default(config);
@@ -687,12 +696,7 @@ int main(int argc, char **argv)
 			td[i].damping = config.damping;
 			td[i].print = config.display_progress;
 			td[i].num_particles = particles.size();
-			rc = pthread_create(&threads[i], NULL, barnes_hut_thread, (void*) &td[i]);
-			if (rc)
-			{
-				std::cerr << "Could not create thread." << std::endl;
-				exit(1);
-			}
+			create_thread(&threads[i], NULL, barnes_hut_thread, (void*) &td[i]);
 		}
 		for (unsigned int i = 0; i < config.threads; i++)
 		{
@@ -729,12 +733,7 @@ int main(int argc, char **argv)
 				ud[i].start = (particles.size() / config.threads) * i;
 				ud[i].end = (particles.size() / config.threads) * (i + 1);
 				ud[i].dt = config.dt;
-				rc = pthread_create(&threads[i], NULL, update_all, (void*) &ud[i]);
-				if (rc)
-				{
-					std::cerr << "Could not create thread." << std::endl;
-					exit(1);
-				}
+				create_thread(&threads[i], NULL, update_all, (void*) &ud[i]);
 			}
 			for (unsigned int i = 0; i < config.threads; i++)
 			{
@@ -757,12 +756,7 @@ int main(int argc, char **argv)
 				fd.overwrite = config.overwrite_data;
 				fd.keep_prev_binary = config.keep_previous_binary;
 				fd.keep_prev_text = config.keep_previous_text;
-				rc = pthread_create(&file_thread, NULL, dump, (void*) &fd);
-				if (rc)
-				{
-					std::cerr << "Could not create thread." << std::endl;
-					exit(1);
-				}
+				create_thread(&file_thread, NULL, dump, (void*) &fd);
 			}
 			frame++;
 			std::cout << "Frame " << frame << "/" << config.num_frames << std::endl;
@@ -783,12 +777,7 @@ int main(int argc, char **argv)
 					fd.overwrite = config.overwrite_data;
 					fd.keep_prev_binary = config.keep_previous_binary;
 					fd.keep_prev_text = config.keep_previous_text;
-					rc = pthread_create(&file_thread, NULL, dump, (void*) &fd);
-					if (rc)
-					{
-						std::cerr << "Could not create thread." << std::endl;
-						exit(1);
-					}
+					create_thread(&file_thread, NULL, dump, (void*) &fd);
 				}
 				frame++;
 				std::cout << "Frame " << frame << "/" << config.num_frames << std::endl;
