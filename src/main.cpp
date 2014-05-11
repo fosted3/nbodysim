@@ -361,10 +361,10 @@ unsigned int read_data(std::vector<particle*> &particles, unsigned int num_frame
 {
 	assert (particles.size() == 0);
 	unsigned int size = sizeof(particle);
-	unsigned int frame = num_frames;
+	int frame = num_frames;
 	unsigned int num_particles;
-	while (!file_exists(gen_filename(frame, true).c_str()) && frame > 0) { frame--; }
-	if (frame == 0) { return 0; }
+	while (!file_exists(gen_filename(frame, true).c_str()) && frame >= 0) { frame--; }
+	if (frame == -1) { return 0; }
 	std::fstream infile(gen_filename(frame, true), std::ios::in | std::ios::binary);
 	particle temp;
 	particle *to_add;
