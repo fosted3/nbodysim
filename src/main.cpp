@@ -43,7 +43,7 @@ struct settings
 	bool keep_previous_binary;
 	bool keep_previous_text;
 	bool verbose;
-	bool adaptive;
+	bool adaptive_dt;
 	bool damping;
 	unsigned int num_particles;
 	unsigned int num_frames;
@@ -126,7 +126,7 @@ vector random_vector(double low, double high)
 	return rv;
 }
 
-void generate_particle(settings &s, std::vector<particle*> &particles, octree *root)
+void generate_particle(settings &s, std::vector<particle*> &particles)
 {
 	vector null = vector(0, 0, 0);
 	double mass = random_double(s.min_mass, s.max_mass, s.mass_dist);
@@ -169,7 +169,6 @@ void generate_particle(settings &s, std::vector<particle*> &particles, octree *r
 	}
 	assert(par != NULL);
 	particles.push_back(par);
-	root -> add_particle(par);
 }
 
 void check_tree(std::vector<particle*> &particles, octree *root)
@@ -358,7 +357,7 @@ void *dump(void *data)
 	pthread_exit(NULL);
 }
 
-unsigned int read_data(std::vector<particle*> &particles, octree *root, unsigned int num_frames)
+unsigned int read_data(std::vector<particle*> &particles, unsigned int num_frames)
 {
 	assert (particles.size() == 0);
 	unsigned int size = sizeof(particle);
@@ -377,9 +376,50 @@ unsigned int read_data(std::vector<particle*> &particles, octree *root, unsigned
 		infile.read((char*) &temp, size);
 		to_add = new particle(temp);
 		particles.push_back(to_add);
-		root -> add_particle(to_add);
 	}
 	return frame + 1;
+}
+
+octree* gen_root(std::vector<particle*> &particles)
+{
+	double min_x =  1e6;
+	double min_y =  1e6;
+	double min_z =  1e6;
+	double max_x = -1e6;
+	double max_y = -1e6;
+	double max_z = -1e6;
+	double size;
+	vector origin;
+	vector temp;
+	for (unsigned int i = 0; i < particles.size(); i++)
+	{
+		temp = *(particles[i] -> get_pos());
+		if (temp.get_x() < min_x) { min_x = temp.get_x(); }
+		if (temp.get_x() > max_x) { max_x = temp.get_x(); }
+		if (temp.get_y() < min_y) { min_y = temp.get_y(); }
+		if (temp.get_y() > max_y) { max_y = temp.get_y(); }
+		if (temp.get_z() < min_z) { min_z = temp.get_z(); }
+		if (temp.get_z() > max_z) { max_z = temp.get_z(); }
+	}
+	origin = vector((min_x + max_x) / 2.0, (min_y + max_y) / 2.0, (min_z + max_z) / 2.0);
+	if ((max_x - min_x) > (max_y - min_y) && (max_x - min_x) > (max_z - min_z))
+	{
+		size = (max_x - min_x) + 2.0;
+	}
+	else if ((max_y - min_y) > (max_x - min_x) && (max_y - min_y) > (max_z - min_z))
+	{
+		size = (max_y - min_y) + 2.0;
+	}
+	else
+	{
+		size = (max_z - min_z) + 2.0;
+	}
+	octree* root = new octree(&origin, size);
+	for (unsigned int i = 0; i < particles.size(); i++)
+	{
+		root -> add_particle(particles[i]);
+	}
+	return root;
 }
 
 void read_settings(settings &s, const char* sfile)
@@ -446,11 +486,11 @@ void read_settings(settings &s, const char* sfile)
 				if (var.compare("true") == 0) { s.verbose = true; }
 				else { s.verbose = false; }
 			}
-			else if (var.compare("adaptive") == 0)
+			else if (var.compare("adaptive_dt") == 0)
 			{
 				cfg >> var;
-				if (var.compare("true") == 0) { s.adaptive = true; }
-				else { s.adaptive = false; }
+				if (var.compare("true") == 0) { s.adaptive_dt = true; }
+				else { s.adaptive_dt = false; }
 			}
 			else if (var.compare("damping") == 0)
 			{
@@ -515,12 +555,6 @@ void read_settings(settings &s, const char* sfile)
 			else if (var.compare("brightness") == 0) { cfg >> var; }
 			else if (var.compare("projection") == 0) { cfg >> var; }
 			else { std::cerr << "Unrecognized variable " << var << std::endl; }
-			/*
-			s.r_sphere = false;
-			s.rotation_magnitude = 0;
-			s.rotation_vector = vector(0, 0, 1);
-			s.gen_type = CUBE;
-			*/
 		}
 	}
 	else
@@ -551,7 +585,7 @@ void set_default(settings &s)
 	s.max_mass = 5e11;
 	s.min_vel = 0;
 	s.max_vel = 0;
-	s.adaptive = false;
+	s.adaptive_dt = false;
 	s.max_vel_change = 3;
 	s.max_pos_change = 3;
 	s.min_adaptive_dt = 0.00333;
@@ -602,8 +636,7 @@ int main(int argc, char **argv)
 		seed = time(NULL);
 	}
 	srand(seed);
-	vector origin = vector(0, 0, 0);
-	octree* root = new octree(&origin, config.size);
+	octree* root;
 	std::vector<particle*> particles;
 	pthread_t *threads = new pthread_t[config.threads];
 	struct thread_data *td = new thread_data[config.threads];
@@ -612,7 +645,7 @@ int main(int argc, char **argv)
 	struct file_write_data fd;
 	if (config.read_existing)
 	{
-		start_frame = read_data(particles, root, config.num_frames);
+		start_frame = read_data(particles, config.num_frames);
 		if (start_frame == 0)
 		{
 			std::cout << "No data to resume from." << std::endl;
@@ -628,7 +661,7 @@ int main(int argc, char **argv)
 		std::cout << "Generating particles..." << std::endl;
 		for (unsigned int i = 0; i < config.num_particles; i++)
 		{
-			generate_particle(config, particles, root);
+			generate_particle(config, particles);
 		}
 	}
 	frame = start_frame;
@@ -636,6 +669,8 @@ int main(int argc, char **argv)
 	assert(config.threads > 0);
 	while (frame < config.num_frames)
 	{
+		if (config.verbose) { std::cout << "Generating root..." << std::endl; }
+		root = gen_root(particles);
 		if (config.verbose) { std::cout << "Calculating masses of nodes..." << std::endl; }
 		root -> calc_mass();
 		if (config.verbose) { std::cout << "Calculating COMs of nodes..." << std::endl; }
@@ -676,7 +711,7 @@ int main(int argc, char **argv)
 			pthread_join(file_thread, NULL);
 		}
 		if (config.verbose) { std::cout << "Updating particles..." << std::endl; }
-		if (config.adaptive)
+		if (config.adaptive_dt)
 		{
 			adaptive_dt = update_all(particles, config.max_vel_change, config.max_pos_change);
 			if (adaptive_dt > config.dt) { adaptive_dt = config.dt; }
@@ -705,19 +740,12 @@ int main(int argc, char **argv)
 			{
 				pthread_join(threads[i], NULL);
 			}
-			//update_all(particles, config.dt);
 		}
-		if (config.verbose) { std::cout << "Checking for strays..." << std::endl; }
-		check_tree(particles, root);
+		/*if (config.verbose) { std::cout << "Checking for strays..." << std::endl; }
+		check_tree(particles, root);*/
 		if (config.verbose) { std::cout << "Deallocating nodes..." << std::endl; }
 		delete root;
-		if (config.verbose) { std::cout << "Regenerating nodes..." << std::endl; }
-		root = new octree(&origin, config.size);
-		for (unsigned int i = 0; i < particles.size(); i++)
-		{
-			root -> add_particle(particles[i]);
-		}
-		if (!config.adaptive)
+		if (!config.adaptive_dt)
 		{
 			if (config.dump_binary || config.dump_text)
 			{
@@ -768,7 +796,6 @@ int main(int argc, char **argv)
 		}
 	}
 	pthread_join(file_thread, NULL);
-	delete root;
 	for (unsigned int i = 0; i < particles.size(); i++)
 	{
 		delete particles[i];
