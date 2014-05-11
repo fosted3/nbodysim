@@ -74,9 +74,8 @@ def render(frame, img_w, img_h, inc, proj, scale):
 	im.save(gen_image(frame))
 	return True
 	
-if (len(sys.argv) != 2):
-	print(len(sys.argv))
-	print("Usage: python " + sys.argv[0] + " config")
+if (len(sys.argv) != 2 and len(sys.argv) != 3):
+	print("Usage: python " + sys.argv[0] + " config [frame]")
 	raise sys.exit()
 
 frame = 0
@@ -100,5 +99,8 @@ for line in config:
 			inc = float(pair[1])
 		if (pair[0] == "scale"):
 			scale = float(pair[1])
-while (render(frame, img_w, img_h, inc, proj, scale)):
-	frame += 1
+if (len(sys.argv) == 3):
+	render(int(sys.argv[2]), img_w, img_h, inc, proj, scale)
+else:
+	while (render(frame, img_w, img_h, inc, proj, scale)):
+		frame += 1
