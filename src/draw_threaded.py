@@ -47,17 +47,21 @@ for line in config:
 			num_frames = int(pair[1])
 config.close()
 assert(num_frames != -1)
+q = queue.Queue()
 for frame in range(0, num_frames):
 	if (os.path.isfile(gen_data(frame)) and not os.path.isfile(gen_image(frame))):
 		work.append((sys.argv[1], frame))
-
-q = queue.Queue()
 for i in range(clamp(0, threads, len(work))):
      t = threading.Thread(target=worker)
      t.daemon = True
      t.start()
-
-for item in work:
-    q.put(item)
-
-q.join()
+while True:
+	for item in work:
+		q.put(item)
+	work = []
+	q.join()
+	for frame in range(0, num_frames):
+		if (os.path.isfile(gen_data(frame)) and not os.path.isfile(gen_image(frame))):
+			work.append((sys.argv[1], frame))
+	if (len(work) == 0):
+		break
