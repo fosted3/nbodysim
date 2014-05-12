@@ -55,7 +55,7 @@ for i in range(clamp(0, threads, len(work))):
      t = threading.Thread(target=worker)
      t.daemon = True
      t.start()
-while True:
+while len(work) > 0:
 	for item in work:
 		q.put(item)
 	work = []
@@ -63,5 +63,3 @@ while True:
 	for frame in range(0, num_frames):
 		if (os.path.isfile(gen_data(frame)) and not os.path.isfile(gen_image(frame))):
 			work.append((sys.argv[1], frame))
-	if (len(work) == 0):
-		break
