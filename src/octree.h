@@ -27,6 +27,8 @@ class octree
 		double get_side(void);
 		octree* get_child(int);
 		particle* get_particle(void);
+		void calc_mass_threaded(void);
+		void calc_com_threaded(void);
 	private:
 		octree* parent;
 		vector center;
@@ -36,5 +38,9 @@ class octree
 		particle* p;
 		double mass;
 };
+
+void* calc_mass_thread(void*);
+void* calc_com_thread(void*);
+
 
 #endif

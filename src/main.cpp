@@ -5,6 +5,7 @@
 #define EXP 1
 #define NORMAL 2
 
+#include "thread_functions.h"
 #include "vector.h"
 #include "particle.h"
 #include "octree.h"
@@ -43,7 +44,6 @@ struct settings
 	bool keep_previous_binary;
 	bool keep_previous_text;
 	bool verbose;
-	bool adaptive_dt;
 	bool damping;
 	unsigned int num_particles;
 	unsigned int num_frames;
@@ -58,7 +58,6 @@ struct settings
 	double max_vel;
 	double max_vel_change;
 	double max_pos_change;
-	double min_adaptive_dt;
 	double r_sphere;
 	double rotation_magnitude;
 	double scale_x;
@@ -105,7 +104,7 @@ double clamp(double min, double x, double max)
 double random_double(double low, double high, unsigned int dist)
 {
 	assert(dist == LINEAR || dist == EXP);
-	double r;
+	double r = -1;
 	if (dist == LINEAR)
 	{
 		r = rand();
@@ -122,6 +121,7 @@ double random_double(double low, double high, unsigned int dist)
 			r = log(r) * -0.5 * (high - low);
 		} while (r > high || r < low);
 	}
+	assert (r != -1);
 	return r;
 }
 
@@ -288,6 +288,35 @@ void *barnes_hut_thread(void *data)
 	pthread_exit(NULL);
 }
 
+void barnes_hut_threaded(struct settings &config, std::vector<particle*> &particles, octree* root)
+{
+	pthread_t *threads = new pthread_t[config.threads];
+	struct thread_data *td = new thread_data[config.threads];
+	for (unsigned int i = 0; i < config.threads; i++)
+	{
+		td[i].thread_id = i;
+		td[i].particles = &particles;
+		td[i].root = root;
+		td[i].start = (particles.size() / config.threads) * i;
+		td[i].end = (particles.size() / config.threads) * (i + 1);
+		td[i].theta = config.theta;
+		td[i].damping = config.damping;
+		td[i].print = config.display_progress;
+		td[i].num_particles = particles.size();
+		create_thread(&threads[i], NULL, barnes_hut_thread, (void*) &td[i]);
+	}
+	for (unsigned int i = 0; i < config.threads; i++)
+	{
+		pthread_join(threads[i], NULL);
+	}
+	if (config.display_progress)
+	{
+		printf("\b\b\b\b\b\b\b");
+	}
+	delete[] threads;
+	delete[] td;
+}
+
 bool file_exists(const char *filename)
 {
 	std::ifstream ifile(filename);
@@ -427,6 +456,39 @@ octree* gen_root(std::vector<particle*> &particles)
 	return root;
 }
 
+void update_all_threaded(struct settings &config, std::vector<particle*> &particles)
+{
+	pthread_t *threads = new pthread_t[config.threads];
+	struct update_data *ud = new update_data[config.threads];
+	for (unsigned int i = 0; i < config.threads; i++)
+	{
+		ud[i].particles = &particles;
+		ud[i].start = (particles.size() / config.threads) * i;
+		ud[i].end = (particles.size() / config.threads) * (i + 1);
+		ud[i].dt = config.dt;
+		create_thread(&threads[i], NULL, update_all, (void*) &ud[i]);
+	}
+	for (unsigned int i = 0; i < config.threads; i++)
+	{
+		pthread_join(threads[i], NULL);
+	}
+	delete[] threads;
+	delete[] ud;
+}
+
+void dump_threaded(struct settings &config, unsigned int frame, std::vector<particle*> &particles, pthread_t &file_thread)
+{
+	struct file_write_data fd; 
+	fd.particles = &particles;
+	fd.frame = frame;
+	fd.binary = config.dump_binary;
+	fd.text = config.dump_text;
+	fd.overwrite = config.overwrite_data;
+	fd.keep_prev_binary = config.keep_previous_binary;
+	fd.keep_prev_text = config.keep_previous_text;
+	create_thread(&file_thread, NULL, dump, (void*) &fd);
+}
+
 void read_settings(settings &s, const char* sfile)
 {
 	std::cout << "Reading config file " << sfile << std::endl;
@@ -491,12 +553,6 @@ void read_settings(settings &s, const char* sfile)
 				if (var.compare("true") == 0) { s.verbose = true; }
 				else { s.verbose = false; }
 			}
-			else if (var.compare("adaptive_dt") == 0)
-			{
-				cfg >> var;
-				if (var.compare("true") == 0) { s.adaptive_dt = true; }
-				else { s.adaptive_dt = false; }
-			}
 			else if (var.compare("damping") == 0)
 			{
 				cfg >> var;
@@ -556,7 +612,6 @@ void read_settings(settings &s, const char* sfile)
 			else if (var.compare("max_vel") == 0) { cfg >> s.max_vel; }
 			else if (var.compare("max_vel_change") == 0) { cfg >> s.max_vel_change; }
 			else if (var.compare("max_pos_change") == 0) { cfg >> s.max_pos_change; }
-			else if (var.compare("min_adaptive_dt") == 0) { cfg >> s.min_adaptive_dt; }
 			else if (var.compare("brightness") == 0) { cfg >> var; }
 			else if (var.compare("projection") == 0) { cfg >> var; }
 			else if (var.compare("img_w") == 0) { cfg >> var; }
@@ -593,10 +648,8 @@ void set_default(settings &s)
 	s.max_mass = 5e11;
 	s.min_vel = 0;
 	s.max_vel = 0;
-	s.adaptive_dt = false;
 	s.max_vel_change = 3;
 	s.max_pos_change = 3;
-	s.min_adaptive_dt = 0.00333;
 	s.r_sphere = 100;
 	s.rotation_magnitude = 0.1;
 	s.rotation_vector = vector(0, 0, 1);
@@ -610,22 +663,9 @@ void set_default(settings &s)
 	s.threads = 1;
 }
 
-void create_thread(pthread_t *thread, const pthread_attr_t *attr, void *(*start_routine) (void *), void *arg)
-{
-	int rc = pthread_create(thread, attr, start_routine, arg);
-	if (rc)
-	{
-		std::cerr << "Could not create thread." << std::endl;
-		exit(1);
-	}
-}
-
 int main(int argc, char **argv)
 {
 	unsigned int start_frame = 0;
-	double adaptive_dt = 0;
-	double elapsed_time = 0;
-	double frame_time = 0;
 	unsigned int frame = 0;
 	bool first = true;
 	settings config;
@@ -655,11 +695,7 @@ int main(int argc, char **argv)
 	srand(seed);
 	octree* root;
 	std::vector<particle*> particles;
-	pthread_t *threads = new pthread_t[config.threads];
-	struct thread_data *td = new thread_data[config.threads];
-	struct update_data *ud = new update_data[config.threads];
 	pthread_t file_thread;
-	struct file_write_data fd;
 	if (config.read_existing)
 	{
 		start_frame = read_data(particles, config.num_frames);
@@ -689,31 +725,11 @@ int main(int argc, char **argv)
 		if (config.verbose) { std::cout << "Generating root..." << std::endl; }
 		root = gen_root(particles);
 		if (config.verbose) { std::cout << "Calculating masses of nodes..." << std::endl; }
-		root -> calc_mass();
+		root -> calc_mass_threaded();
 		if (config.verbose) { std::cout << "Calculating COMs of nodes..." << std::endl; }
-		root -> calc_com();
+		root -> calc_com_threaded();
 		if (config.verbose) { std::cout << "Starting Barnes-Hut algorithm..." << std::endl; }
-		for (unsigned int i = 0; i < config.threads; i++)
-		{
-			td[i].thread_id = i;
-			td[i].particles = &particles;
-			td[i].root = root;
-			td[i].start = (particles.size() / config.threads) * i;
-			td[i].end = (particles.size() / config.threads) * (i + 1);
-			td[i].theta = config.theta;
-			td[i].damping = config.damping;
-			td[i].print = config.display_progress;
-			td[i].num_particles = particles.size();
-			create_thread(&threads[i], NULL, barnes_hut_thread, (void*) &td[i]);
-		}
-		for (unsigned int i = 0; i < config.threads; i++)
-		{
-			pthread_join(threads[i], NULL);
-		}
-		if (config.display_progress)
-		{
-			printf("\b\b\b\b\b\b\b");
-		}
+		barnes_hut_threaded(config, particles, root);
 		if (first)
 		{
 			first = false;
@@ -723,82 +739,24 @@ int main(int argc, char **argv)
 			pthread_join(file_thread, NULL);
 		}
 		if (config.verbose) { std::cout << "Updating particles..." << std::endl; }
-		if (config.adaptive_dt)
-		{
-			adaptive_dt = update_all(particles, config.max_vel_change, config.max_pos_change);
-			if (adaptive_dt > config.dt) { adaptive_dt = config.dt; }
-			//if (elapsed_time + adaptive_dt > frame_time + config.dt) { adaptive_dt = (frame_time + config.dt) - elapsed_time; }
-			if (adaptive_dt < config.min_adaptive_dt) { adaptive_dt = config.min_adaptive_dt; }
-			update_all(particles, adaptive_dt);
-			elapsed_time += adaptive_dt;
-			if (config.verbose) { std::cout << "Elapsed time: " << elapsed_time << std::endl; }
-		}
-		else
-		{
-			for (unsigned int i = 0; i < config.threads; i++)
-			{
-				ud[i].particles = &particles;
-				ud[i].start = (particles.size() / config.threads) * i;
-				ud[i].end = (particles.size() / config.threads) * (i + 1);
-				ud[i].dt = config.dt;
-				create_thread(&threads[i], NULL, update_all, (void*) &ud[i]);
-			}
-			for (unsigned int i = 0; i < config.threads; i++)
-			{
-				pthread_join(threads[i], NULL);
-			}
-		}
-		/*if (config.verbose) { std::cout << "Checking for strays..." << std::endl; }
-		check_tree(particles, root);*/
+		update_all_threaded(config, particles);
 		if (config.verbose) { std::cout << "Deallocating nodes..." << std::endl; }
 		delete root;
-		if (!config.adaptive_dt)
+		if (config.dump_binary || config.dump_text)
 		{
-			if (config.dump_binary || config.dump_text)
-			{
-				if (config.verbose) { std::cout << "Dumping data..." << std::endl; }
-				fd.particles = &particles;
-				fd.frame = frame;
-				fd.binary = config.dump_binary;
-				fd.text = config.dump_text;
-				fd.overwrite = config.overwrite_data;
-				fd.keep_prev_binary = config.keep_previous_binary;
-				fd.keep_prev_text = config.keep_previous_text;
-				create_thread(&file_thread, NULL, dump, (void*) &fd);
-			}
-			frame++;
-			std::cout << "Frame " << frame << "/" << config.num_frames << std::endl;
+			if (config.verbose) { std::cout << "Dumping data..." << std::endl; }
+			dump_threaded(config, frame, particles, file_thread);
 		}
-		else
-		{
-			if (elapsed_time >= frame_time + config.dt)
-			{
-				std::cout << elapsed_time << std::endl;
-				frame_time += config.dt;
-				if (config.dump_binary || config.dump_text)
-				{
-					if (config.verbose) { std::cout << "Dumping data..." << std::endl; }
-					fd.particles = &particles;
-					fd.frame = frame;
-					fd.binary = config.dump_binary;
-					fd.text = config.dump_text;
-					fd.overwrite = config.overwrite_data;
-					fd.keep_prev_binary = config.keep_previous_binary;
-					fd.keep_prev_text = config.keep_previous_text;
-					create_thread(&file_thread, NULL, dump, (void*) &fd);
-				}
-				frame++;
-				std::cout << "Frame " << frame << "/" << config.num_frames << std::endl;
-			}
-		}
+		frame++;
+		std::cout << "Frame " << frame << "/" << config.num_frames << std::endl;
 	}
-	pthread_join(file_thread, NULL);
+	if (!first)
+	{
+		pthread_join(file_thread, NULL);
+	}
 	for (unsigned int i = 0; i < particles.size(); i++)
 	{
 		delete particles[i];
 	}
-	delete[] threads;
-	delete[] td;
-	delete[] ud;
 	return 0;
 }

@@ -5,8 +5,8 @@ EXECUTABLE=bin/nbodysim
 
 all: $(EXECUTABLE)
 
-$(EXECUTABLE): build/main.o build/particle.o build/octree.o build/vector.o
-	$(CC) build/main.o build/particle.o build/octree.o build/vector.o -o $(EXECUTABLE) $(LDFLAGS)
+$(EXECUTABLE): build/main.o build/particle.o build/octree.o build/vector.o build/thread_functions.o
+	$(CC) build/main.o build/particle.o build/octree.o build/vector.o build/thread_functions.o -o $(EXECUTABLE) $(LDFLAGS)
 
 build/main.o: src/main.cpp
 	$(CC) $(CFLAGS) src/main.cpp -o build/main.o
@@ -19,6 +19,9 @@ build/octree.o: src/octree.cpp
 
 build/vector.o: src/vector.cpp
 	$(CC) $(CFLAGS) src/vector.cpp -o build/vector.o
+
+build/thread_functions.o: src/thread_functions.cpp
+	$(CC) $(CFLAGS) src/thread_functions.cpp -o build/thread_functions.o
 
 clean:
 	rm -rf build/*.o bin/nbodysim

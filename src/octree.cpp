@@ -1,7 +1,9 @@
 #include "octree.h"
+#include "thread_functions.h"
 #include <cstddef>
 #include <cassert>
 #include <iostream>
+#include <pthread.h>
 //#include <stdlib.h>
 //#include <cmath>
 
@@ -19,6 +21,8 @@ octree::octree(vector *cen, double sid, octree *par)
 		this -> children[i] = NULL;
 	}
 	this -> p = NULL;
+	this -> com = *cen;
+	this -> mass = 0;
 }
 
 octree::octree(vector *cen, double sid)
@@ -31,6 +35,8 @@ octree::octree(vector *cen, double sid)
 		this -> children[i] = NULL;
 	}
 	this -> p = NULL;
+	this -> com = *cen;
+	this -> mass = 0;
 }
 
 void octree::allocate_child(int i)
@@ -187,12 +193,12 @@ double octree::get_mass(void)
 	return this -> mass;
 }
 
-void octree::calc_mass(void) //call on root
+void octree::calc_mass(void) //call on root *only*
 {
 	if (this -> p == NULL)
 	{
 		this -> mass = 0;
-		for (int i = 0; i < 8; i++)
+		for (unsigned int i = 0; i < 8; i++)
 		{
 			if (this -> children[i] != NULL)
 			{
@@ -207,7 +213,36 @@ void octree::calc_mass(void) //call on root
 	}
 }
 
-void octree::calc_com(void) //call on root
+void *calc_mass_thread(void *obj)
+{
+	octree* target = (octree*) obj;
+	target -> calc_mass();
+	pthread_exit(NULL);
+}
+
+void octree::calc_mass_threaded(void) //call on root *only*
+{
+	pthread_t threads[8];
+	octree* objs[8];
+	for (unsigned int i = 0; i < 8; i++)
+	{
+		if (children[i] == NULL) { continue; }
+		objs[i] = this -> children[i];
+		create_thread(&threads[i], NULL, calc_mass_thread, (void*) objs[i]);
+	}
+	for (unsigned int i = 0; i < 8; i++)
+	{
+		if (children[i] == NULL) { continue; }
+		pthread_join(threads[i], NULL);
+	}
+	for (unsigned int i = 0; i < 8; i++)
+	{
+		if (children[i] == NULL) { continue; }
+		this -> mass += this -> children[i] -> get_mass();
+	}
+}
+
+void octree::calc_com(void) //call on root *only*
 {
 	if (this -> p != NULL)
 	{
@@ -230,6 +265,41 @@ void octree::calc_com(void) //call on root
 		this -> com = temp;
 	}
 	//this -> com.print();
+}
+
+void *calc_com_thread(void *obj)
+{
+	octree *target = (octree*) obj;
+	target -> calc_com();
+	pthread_exit(NULL);
+}
+
+void octree::calc_com_threaded(void) //call on root *only*
+{
+	pthread_t threads[8];
+	octree* objs[8];
+	vector temp = vector(0, 0, 0);
+	vector temp2;
+	for (unsigned int i = 0; i < 8; i++)
+	{
+		if (children[i] == NULL) { continue; }
+		objs[i] = this -> children[i];
+		create_thread(&threads[i], NULL, calc_com_thread, (void*) objs[i]);
+	}
+	for (unsigned int i = 0; i < 8; i++)
+	{
+		if (children[i] == NULL) { continue; }
+		pthread_join(threads[i], NULL);
+	}
+	for (unsigned int i = 0; i < 8; i++)
+	{
+		if (children[i] == NULL) { continue; }
+		temp2 = *(this -> children[i] -> get_com());
+		temp2 *= this -> children[i] -> get_mass();
+		temp += temp2;
+	}
+	temp /= this -> mass;
+	this -> com = temp;
 }
 
 vector* octree::get_com(void)
