@@ -6,10 +6,10 @@ EXECUTABLE=bin/nbodysim
 all: $(EXECUTABLE)
 
 $(EXECUTABLE): build/main.o build/particle.o build/octree.o build/vector.o build/thread_functions.o
-	$(CC) build/main.o build/particle.o build/octree.o build/vector.o build/thread_functions.o -o $(EXECUTABLE) $(LDFLAGS)
+	$(CC) build/main.o build/particle.o build/octree.o build/vector.o build/thread_functions.o -o $(EXECUTABLE) `libpng-config --ldflags` $(LDFLAGS)
 
 build/main.o: src/main.cpp
-	$(CC) $(CFLAGS) src/main.cpp -o build/main.o
+	$(CC) $(CFLAGS) src/main.cpp -o build/main.o `libpng-config --cflags`
 
 build/particle.o: src/particle.cpp
 	$(CC) $(CFLAGS) src/particle.cpp -o build/particle.o

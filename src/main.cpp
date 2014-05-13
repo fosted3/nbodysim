@@ -4,6 +4,10 @@
 #define LINEAR 0
 #define EXP 1
 #define NORMAL 2
+#define FRONT 0
+#define SIDE 1
+#define TOP 2
+#define ISO 3
 
 #include "thread_functions.h"
 #include "vector.h"
@@ -19,6 +23,7 @@
 #include <fstream>
 #include <cassert>
 #include <pthread.h>
+#include <png++/png.hpp>
 
 struct thread_data
 {
@@ -40,6 +45,7 @@ struct settings
 	bool display_progress;
 	bool dump_binary;
 	bool dump_text;
+	bool dump_image;
 	bool overwrite_data;
 	bool keep_previous_binary;
 	bool keep_previous_text;
@@ -48,6 +54,9 @@ struct settings
 	unsigned int num_particles;
 	unsigned int num_frames;
 	unsigned int threads;
+	unsigned int img_w;
+	unsigned int img_h;
+	unsigned int projection;
 	double size;
 	double theta;
 	double dt;
@@ -63,6 +72,8 @@ struct settings
 	double scale_x;
 	double scale_y;
 	double scale_z;
+	double brightness;
+	double scale;
 	vector rotation_vector;
 	unsigned int gen_type;
 	unsigned int mass_dist;
@@ -73,11 +84,18 @@ struct file_write_data
 {
 	std::vector<particle*> *particles;
 	unsigned int frame;
+	unsigned int img_w;
+	unsigned int img_h;
+	unsigned int projection;
+	double scale;
+	double brightness;
 	bool binary;
 	bool text;
+	bool image;
 	bool overwrite;
 	bool keep_prev_binary;
 	bool keep_prev_text;
+	
 };
 
 struct update_data
@@ -94,16 +112,10 @@ struct generate_data
 	std::vector<particle*> *particles;
 };
 
-double clamp(double min, double x, double max)
+double clamp(double a, double x, double b)
 {
-	if (x < min)
-	{
-		return min;
-	}
-	if (x > max)
-	{
-		return max;
-	}
+	if (x < a) { return a; }
+	if (x > b) { return b; }
 	return x;
 }
 
@@ -343,17 +355,85 @@ std::string gen_filename(unsigned int frame, bool binary)
 	return filename;
 }
 
+std::string gen_image(unsigned int frame)
+{
+	std::string filename = std::to_string(frame);
+	while (filename.length() < 4) { filename.insert(0, "0"); }
+	filename.insert(0, "./img/");
+	filename += ".png";
+	return filename;
+}
+
+void write_image(unsigned int img_w, unsigned int img_h, unsigned int projection, double scale, double brightness, unsigned int frame, std::vector<particle*> &particles)
+{
+	png::image< png::rgb_pixel > image(img_w, img_h);
+	double *temp = new double[img_w*img_h];
+	for (unsigned int i = 0; i < img_w * img_h; i++)
+	{
+		temp[i] = 0;
+	}
+	assert(projection == FRONT || projection == SIDE || projection == TOP || projection == ISO);
+	double x = 0;
+	double y = 0;
+	int v = 0;
+	if (projection == ISO) { scale *= 2.0; }
+	for (unsigned int i = 0; i < particles.size(); i++)
+	{
+		if (projection == FRONT)
+		{
+			x = particles[i] -> get_pos() -> get_x();
+			y = particles[i] -> get_pos() -> get_z();
+		}
+		else if (projection == SIDE)
+		{
+			x = particles[i] -> get_pos() -> get_y();
+			y = particles[i] -> get_pos() -> get_z();
+		}
+		else if (projection == TOP)
+		{
+			x = particles[i] -> get_pos() -> get_x();
+			y = particles[i] -> get_pos() -> get_y();
+		}
+		else
+		{
+			x = ((sqrt(3) / 2.0) * (particles[i] -> get_pos() -> get_x() - particles[i] -> get_pos() -> get_y()) + img_w) / 2.0;
+			y = ((-0.5) * (particles[i] -> get_pos() -> get_x() + particles[i] -> get_pos() -> get_y() + 2 * particles[i] -> get_pos() -> get_z()) + img_h) / 2.0;
+		}
+		x += (x - (img_w / 2)) * (scale - 1);
+		y += (y - (img_h / 2)) * (scale - 1);
+		x = clamp(0, x, img_w - 1);
+		y = clamp(0, y, img_h - 1);
+		temp[((int) x) + ((int) y) * img_h] += brightness;
+	}
+	for (unsigned int x_i = 0; x_i < img_w; x_i++)
+	{
+		for (unsigned int y_i = 0; y_i < img_h; y_i++)
+		{
+			v = (int) clamp(0, temp[x_i + y_i * img_h], 255);
+			image[y_i][x_i] = png::rgb_pixel(v, v, v);
+		}
+	}
+	image.write(gen_image(frame));
+	delete[] temp;
+}
+
 void *dump(void *data)
 {
 	struct file_write_data *args;
 	args = (struct file_write_data*) data;
 	unsigned int size = sizeof(particle);
 	unsigned int frame = args -> frame;
+	unsigned int img_w = args -> img_w;
+	unsigned int img_h = args -> img_h;
+	unsigned int projection = args -> projection;
 	bool overwrite = args -> overwrite;
 	bool keep_prev_binary = args -> keep_prev_binary;
 	bool keep_prev_text = args -> keep_prev_text;
 	bool binary = args -> binary;
 	bool text = args -> text;
+	bool image = args -> image;
+	double scale = args -> scale;
+	double brightness = args -> brightness;
 	std::vector<particle*> *particles = args -> particles;
 	std::string bfilename = gen_filename(frame, true);
 	std::string tfilename = gen_filename(frame, false);
@@ -397,6 +477,10 @@ void *dump(void *data)
 		}
 		toutfile.flush();
 		toutfile.close();
+	}
+	if (image)
+	{
+		write_image(img_w, img_h, projection, scale, brightness, frame, *particles);
 	}
 	pthread_exit(NULL);
 }
@@ -570,6 +654,12 @@ void dump_threaded(struct settings &config, unsigned int frame, std::vector<part
 	fd.overwrite = config.overwrite_data;
 	fd.keep_prev_binary = config.keep_previous_binary;
 	fd.keep_prev_text = config.keep_previous_text;
+	fd.img_w = config.img_w;
+	fd.img_h = config.img_h;
+	fd.projection = config.projection;
+	fd.scale = config.scale;
+	fd.brightness = config.brightness;
+	fd.image = config.dump_image;
 	create_thread(&file_thread, NULL, dump, (void*) &fd);
 }
 
@@ -639,6 +729,12 @@ void read_settings(settings &s, const char* sfile)
 				if (var.compare("true") == 0) { s.dump_text = true; }
 				else { s.dump_text = false; }
 			}
+			else if (var.compare("dump_image") == 0)
+			{
+				cfg >> var;
+				if (var.compare("true") == 0) { s.dump_image = true; }
+				else { s.dump_image = false; }
+			}
 			else if (var.compare("overwrite_data") == 0)
 			{
 				cfg >> var;
@@ -704,6 +800,16 @@ void read_settings(settings &s, const char* sfile)
 				else if (var.compare("exp") == 0) { s.vel_dist = EXP; }
 				assert(s.vel_dist != 128);
 			}
+			else if (var.compare("projection") == 0)
+			{
+				cfg >> var;
+				s.projection = 128;
+				if (var.compare("front") == 0) { s.projection = FRONT; }
+				else if (var.compare("side") == 0) { s.projection = SIDE; }
+				else if (var.compare("top") == 0) { s.projection = TOP; }
+				else if (var.compare("iso") == 0) { s.projection = ISO; }
+				assert(s.projection != 128);
+			}
 			else if (var.compare("threads") == 0) { cfg >> s.threads; }
 			else if (var.compare("scale_x") == 0) { cfg >> s.scale_x; }
 			else if (var.compare("scale_y") == 0) { cfg >> s.scale_y; }
@@ -722,11 +828,10 @@ void read_settings(settings &s, const char* sfile)
 			else if (var.compare("max_vel") == 0) { cfg >> s.max_vel; }
 			else if (var.compare("max_vel_change") == 0) { cfg >> s.max_vel_change; }
 			else if (var.compare("max_pos_change") == 0) { cfg >> s.max_pos_change; }
-			else if (var.compare("brightness") == 0) { cfg >> var; }
-			else if (var.compare("projection") == 0) { cfg >> var; }
-			else if (var.compare("img_w") == 0) { cfg >> var; }
-			else if (var.compare("img_h") == 0) { cfg >> var; }
-			else if (var.compare("scale") == 0) { cfg >> var; }
+			else if (var.compare("brightness") == 0) { cfg >> s.brightness; }
+			else if (var.compare("img_w") == 0) { cfg >> s.img_w; }
+			else if (var.compare("img_h") == 0) { cfg >> s.img_h; }
+			else if (var.compare("scale") == 0) { cfg >> s.scale; }
 			else { std::cerr << "Unrecognized variable " << var << std::endl; }
 		}
 	}
@@ -742,8 +847,9 @@ void set_default(settings &s)
 	s.read_existing = false;
 	s.use_seed = false;
 	s.display_progress = true;
-	s.dump_binary = false;
+	s.dump_binary = true;
 	s.dump_text = true;
+	s.dump_image = true;
 	s.overwrite_data = false;
 	s.keep_previous_binary = false;
 	s.keep_previous_text = true;
@@ -771,6 +877,11 @@ void set_default(settings &s)
 	s.scale_z = 1;
 	s.damping = false;
 	s.threads = 1;
+	s.brightness = 255;
+	s.projection = ISO;
+	s.img_w = 1920;
+	s.img_h = 1080;
+	s.scale = 1;
 }
 
 int main(int argc, char **argv)
@@ -852,7 +963,7 @@ int main(int argc, char **argv)
 		update_all_threaded(config, particles);
 		if (config.verbose) { std::cout << "Deallocating nodes..." << std::endl; }
 		delete_root_threaded(root);
-		if (config.dump_binary || config.dump_text)
+		if (config.dump_binary || config.dump_text || config.dump_image)
 		{
 			if (config.verbose) { std::cout << "Dumping data..." << std::endl; }
 			dump_threaded(config, frame, particles, file_thread);
