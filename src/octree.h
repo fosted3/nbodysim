@@ -14,9 +14,9 @@ class octree
 		octree(vector*, double);
 		~octree();
 		void add_particle(particle*);
-		void allocate_child(int);
+		void allocate_child(unsigned int);
 		void print_info(void);
-		void print_info(int);
+		void print_info(unsigned int);
 		void calc_mass(void);
 		double get_mass(void);
 		void calc_com(void);
@@ -25,10 +25,11 @@ class octree
 		void release_particle(void);
 		octree* get_parent(void);
 		double get_side(void);
-		octree* get_child(int);
+		octree* get_child(unsigned int);
 		particle* get_particle(void);
 		void calc_mass_threaded(void);
 		void calc_com_threaded(void);
+		void release_child(unsigned int);
 	private:
 		octree* parent;
 		vector center;

@@ -88,6 +88,12 @@ struct update_data
 	double dt;
 };
 
+struct generate_data
+{
+	octree *target;
+	std::vector<particle*> *particles;
+};
+
 double clamp(double min, double x, double max)
 {
 	if (x < min)
@@ -121,7 +127,11 @@ double random_double(double low, double high, unsigned int dist)
 			r = log(r) * -0.5 * (high - low);
 		} while (r > high || r < low);
 	}
-	assert (r != -1);
+	else
+	{
+		std::cerr << "This shouldn't happen." << std::endl;
+		exit(1);
+	}
 	return r;
 }
 
@@ -456,6 +466,80 @@ octree* gen_root(std::vector<particle*> &particles)
 	return root;
 }
 
+void *gen_root_thread(void *data)
+{
+	struct generate_data *args;
+	args = (struct generate_data*) data;
+	std::vector<particle*> *particles = args -> particles;
+	octree *target = args -> target;
+	assert (target != NULL);
+	unsigned int added = 0;
+	for (unsigned int i = 0; i < particles -> size(); i++)
+	{
+		if (target -> inside((*particles)[i]))
+		{
+			target -> add_particle((*particles)[i]);
+			added ++;
+		}
+	}
+	if (added == 0)
+	{
+		delete target;
+	}
+	pthread_exit(NULL);
+}
+
+octree* gen_root_threaded(std::vector<particle*> &particles)
+{
+	double min_x =  1e6;
+	double min_y =  1e6;
+	double min_z =  1e6;
+	double max_x = -1e6;
+	double max_y = -1e6;
+	double max_z = -1e6;
+	double size;
+	vector origin;
+	vector temp;
+	pthread_t threads[8];
+	struct generate_data data[8];
+	for (unsigned int i = 0; i < particles.size(); i++)
+	{
+		temp = *(particles[i] -> get_pos());
+		if (temp.get_x() < min_x) { min_x = temp.get_x(); }
+		if (temp.get_x() > max_x) { max_x = temp.get_x(); }
+		if (temp.get_y() < min_y) { min_y = temp.get_y(); }
+		if (temp.get_y() > max_y) { max_y = temp.get_y(); }
+		if (temp.get_z() < min_z) { min_z = temp.get_z(); }
+		if (temp.get_z() > max_z) { max_z = temp.get_z(); }
+	}
+	origin = vector((min_x + max_x) / 2.0, (min_y + max_y) / 2.0, (min_z + max_z) / 2.0);
+	if ((max_x - min_x) > (max_y - min_y) && (max_x - min_x) > (max_z - min_z))
+	{
+		size = (max_x - min_x) + 2.0;
+	}
+	else if ((max_y - min_y) > (max_x - min_x) && (max_y - min_y) > (max_z - min_z))
+	{
+		size = (max_y - min_y) + 2.0;
+	}
+	else
+	{
+		size = (max_z - min_z) + 2.0;
+	}
+	octree* root = new octree(&origin, size);
+	for (unsigned int i = 0; i < 8; i++)
+	{
+		root -> allocate_child(i);
+		data[i].target = root -> get_child(i);
+		data[i].particles = &particles;
+		create_thread(&threads[i], NULL, gen_root_thread, (void*) &data[i]);
+	}
+	for (unsigned int i = 0; i < 8; i++)
+	{
+		pthread_join(threads[i], NULL);
+	}
+	return root;
+}
+
 void update_all_threaded(struct settings &config, std::vector<particle*> &particles)
 {
 	pthread_t *threads = new pthread_t[config.threads];
@@ -487,6 +571,32 @@ void dump_threaded(struct settings &config, unsigned int frame, std::vector<part
 	fd.keep_prev_binary = config.keep_previous_binary;
 	fd.keep_prev_text = config.keep_previous_text;
 	create_thread(&file_thread, NULL, dump, (void*) &fd);
+}
+
+void *delete_root_thread(void* obj)
+{
+	octree* target = (octree*) obj;
+	delete target;
+	pthread_exit(NULL);
+}
+
+void delete_root_threaded(octree *root)
+{
+	pthread_t threads[8];
+	octree* objs[8];
+	for (unsigned int i = 0; i < 8; i++)
+	{
+		if (root -> get_child(i) == NULL) { continue; }
+		objs[i] = root -> get_child(i);
+		create_thread(&threads[i], NULL, delete_root_thread, (void*) objs[i]);
+	}
+	for (unsigned int i = 0; i < 8; i++)
+	{
+		if (root -> get_child(i) == NULL) { continue; }
+		pthread_join(threads[i], NULL);
+		root -> release_child(i);
+	}
+	delete root;
 }
 
 void read_settings(settings &s, const char* sfile)
@@ -723,7 +833,7 @@ int main(int argc, char **argv)
 	while (frame < config.num_frames)
 	{
 		if (config.verbose) { std::cout << "Generating root..." << std::endl; }
-		root = gen_root(particles);
+		root = gen_root_threaded(particles);
 		if (config.verbose) { std::cout << "Calculating masses of nodes..." << std::endl; }
 		root -> calc_mass_threaded();
 		if (config.verbose) { std::cout << "Calculating COMs of nodes..." << std::endl; }
@@ -741,7 +851,7 @@ int main(int argc, char **argv)
 		if (config.verbose) { std::cout << "Updating particles..." << std::endl; }
 		update_all_threaded(config, particles);
 		if (config.verbose) { std::cout << "Deallocating nodes..." << std::endl; }
-		delete root;
+		delete_root_threaded(root);
 		if (config.dump_binary || config.dump_text)
 		{
 			if (config.verbose) { std::cout << "Dumping data..." << std::endl; }

@@ -39,7 +39,7 @@ octree::octree(vector *cen, double sid)
 	this -> mass = 0;
 }
 
-void octree::allocate_child(int i)
+void octree::allocate_child(unsigned int i)
 {	/*
 	 z  y  x  i
 	-1 -1 -1  0
@@ -103,14 +103,14 @@ void octree::print_info(void)
 	}
 }	
 
-void octree::print_info(int depth)
+void octree::print_info(unsigned int depth)
 {
-	for (int i = 0; i < depth; i++)
+	for (unsigned int i = 0; i < depth; i++)
 	{
 		std::cout << "\t";
 	}
 	this -> print_info();
-	for (int i = 0; i < 8; i ++)
+	for (unsigned int i = 0; i < 8; i ++)
 	{
 		if (this -> children[i] != NULL)
 		{
@@ -121,11 +121,7 @@ void octree::print_info(int depth)
 
 void octree::add_particle(particle *par)
 {
-	if (!this -> inside(par))
-	{
-		par -> print();
-		assert(this -> inside(par));
-	}
+	assert(this -> inside(par));
 	if (this -> p == NULL)
 	{
 		bool leaf = true;
@@ -340,7 +336,7 @@ double octree::get_side(void)
 	return this -> side;
 }
 
-octree* octree::get_child(int i)
+octree* octree::get_child(unsigned int i)
 {
 	return (this -> children[i]);
 }
@@ -348,4 +344,9 @@ octree* octree::get_child(int i)
 particle* octree::get_particle(void)
 {
 	return this -> p;
+}
+
+void octree::release_child(unsigned int i) //you better make sure you've deleted it first...
+{
+	this -> children[i] = NULL;
 }
