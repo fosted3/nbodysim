@@ -947,7 +947,7 @@ int main(int argc, char **argv)
 		{
 			first = false;
 		}
-		else
+		else if (config.dump_binary || config.dump_text || config.dump_image)
 		{
 			pthread_join(file_thread, NULL);
 		}
@@ -963,7 +963,7 @@ int main(int argc, char **argv)
 		frame++;
 		std::cout << "Frame " << frame << "/" << config.num_frames << std::endl;
 	}
-	if (!first) //there's data to be written possibly
+	if (!first && (config.dump_binary || config.dump_text || config.dump_image)) //there's data to be written possibly
 	{
 		pthread_join(file_thread, NULL);
 	}
