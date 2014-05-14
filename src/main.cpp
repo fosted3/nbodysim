@@ -23,7 +23,7 @@
 #include <fstream>
 #include <cassert>
 #include <pthread.h>
-#include <png++/png.hpp>
+#include <FreeImage.h>
 
 struct thread_data
 {
@@ -366,7 +366,13 @@ std::string gen_image(unsigned int frame)
 
 void write_image(unsigned int img_w, unsigned int img_h, unsigned int projection, double scale, double brightness, unsigned int frame, std::vector<particle*> &particles)
 {
-	png::image< png::rgb_pixel > image(img_w, img_h);
+	FIBITMAP *image = FreeImage_Allocate(img_w, img_h, 24);
+	RGBQUAD color;
+	if (!image)
+	{
+		std::cerr << "Can't allocate memory for image. Exiting." << std::endl;
+		exit(1);
+	}
 	double *temp = new double[img_w*img_h];
 	for (unsigned int i = 0; i < img_w * img_h; i++)
 	{
@@ -410,11 +416,19 @@ void write_image(unsigned int img_w, unsigned int img_h, unsigned int projection
 		for (unsigned int y_i = 0; y_i < img_h; y_i++)
 		{
 			v = (int) clamp(0, temp[x_i + y_i * img_h], 255);
-			image[y_i][x_i] = png::rgb_pixel(v, v, v);
+			color.rgbRed = v;
+			color.rgbBlue = v;
+			color.rgbGreen = v;
+			FreeImage_SetPixelColor(image, x_i, y_i, &color);
 		}
 	}
-	image.write(gen_image(frame));
 	delete[] temp;
+	if (!FreeImage_Save(FIF_PNG, image, gen_image(frame).c_str(), 0))
+	{
+		std::cerr << "Cannot save " << gen_image(frame) << ". Exiting." << std::endl;
+		exit(1);
+	}
+	FreeImage_Unload(image);
 }
 
 void *dump(void *data)
@@ -941,6 +955,7 @@ int main(int argc, char **argv)
 	frame = start_frame;
 	std::cout << "Frame " << frame << "/" << config.num_frames << std::endl;
 	assert(config.threads > 0);
+	FreeImage_Initialise();
 	while (frame < config.num_frames)
 	{
 		if (config.verbose) { std::cout << "Generating root..." << std::endl; }
@@ -975,6 +990,7 @@ int main(int argc, char **argv)
 	{
 		pthread_join(file_thread, NULL);
 	}
+	FreeImage_DeInitialise();
 	for (unsigned int i = 0; i < particles.size(); i++)
 	{
 		delete particles[i];
