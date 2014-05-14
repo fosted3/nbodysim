@@ -24,8 +24,14 @@
 #include <cassert>
 #include <pthread.h>
 #include <FreeImage.h>
+#include <limits>
+#include <random>
 
-struct thread_data
+/****************************************\
+| Structs for passing thread information |
+\****************************************/
+
+struct thread_data //Used for Barnes-Hut thread
 {
 	int thread_id;
 	std::vector<particle*> *particles;
@@ -38,49 +44,7 @@ struct thread_data
 	unsigned int num_particles;
 };
 
-struct settings
-{
-	bool read_existing;
-	bool use_seed;
-	bool display_progress;
-	bool dump_binary;
-	bool dump_text;
-	bool dump_image;
-	bool overwrite_data;
-	bool keep_previous_binary;
-	bool keep_previous_text;
-	bool verbose;
-	bool damping;
-	unsigned int num_particles;
-	unsigned int num_frames;
-	unsigned int threads;
-	unsigned int img_w;
-	unsigned int img_h;
-	unsigned int projection;
-	double size;
-	double theta;
-	double dt;
-	unsigned long seed;
-	double min_mass;
-	double max_mass;
-	double min_vel;
-	double max_vel;
-	double max_vel_change;
-	double max_pos_change;
-	double r_sphere;
-	double rotation_magnitude;
-	double scale_x;
-	double scale_y;
-	double scale_z;
-	double brightness;
-	double scale;
-	vector rotation_vector;
-	unsigned int gen_type;
-	unsigned int mass_dist;
-	unsigned int vel_dist;
-};
-
-struct file_write_data
+struct file_write_data //Used for writing data (binary, text, and image)
 {
 	std::vector<particle*> *particles;
 	unsigned int frame;
@@ -98,7 +62,7 @@ struct file_write_data
 	
 };
 
-struct update_data
+struct update_data //Used for updating particles
 {
 	std::vector<particle*> *particles;
 	unsigned int start;
@@ -106,38 +70,94 @@ struct update_data
 	double dt;
 };
 
-struct generate_data
+struct generate_data //Used for generating root
 {
 	octree *target;
 	std::vector<particle*> *particles;
 };
 
-double clamp(double a, double x, double b)
+/********************************\
+| Struct for all config settings |
+\********************************/
+
+struct settings
+{
+	bool read_existing;			//Read data from existing binary file
+	bool use_seed;				//Use user specified seed
+	bool display_progress;		//Display estimated percentage completion during Barnes-Hut calculations
+	bool dump_binary;			//Write binary (resume) data to file
+	bool dump_text;				//Write text (position) data to plaintext
+	bool dump_image;			//Write image to file
+	bool overwrite_data;		//If file exists, overwrite it
+	bool keep_previous_binary;	//Keep previous binary file after writing
+	bool keep_previous_text;	//Keep previous text file after writing
+	bool verbose;				//Display extra information
+	bool damping;				//Close interaction damping
+	unsigned int num_particles; //How many particles to generate if no resume present
+	unsigned int num_frames;	//How many frames to compute
+	unsigned int threads;		//How many threads to use for Barnes-Hut calculation
+	unsigned int img_w;			//Image width
+	unsigned int img_h;			//Image height
+	unsigned int projection;	//Image projection
+	double size;				//Size of cube if cubic generation specified
+	double theta;				//Theta value for Barnes-Hut calculations
+	double dt;					//Time between frames
+	unsigned long seed;			//User specified seed value
+	double min_mass;			//Minimum particle mass
+	double max_mass;			//Maximum particle mass
+	double min_vel;				//Minimum particle velocity
+	double max_vel;				//Maximum particle velocity
+	double r_sphere;			//Radius of sphere if sphere / shell generation specified
+	double rotation_magnitude;	//Rotation of sphere / shell
+	double scale_x;				//Scale particle x coordinate
+	double scale_y;				//Scale particle y coordinate
+	double scale_z;				//Scale particle z coordinate
+	double brightness;			//How much white to add to location on image if particle lands in pixel
+	double scale;				//Image scale (zoom)
+	vector rotation_vector;		//Vector of rotation (use in file as rotation_vector x y z)
+	unsigned int gen_type;		//How simulation generates particles (cube, sphere, shell)
+	unsigned int mass_dist;		//How mass is distributed (normal, exp, linear)
+	unsigned int vel_dist;		//How velocity is distrubuted in cubic mode (normal, exp, linear)
+};
+
+/*******************\
+| Utility functions |
+\*******************/
+
+double clamp(double a, double x, double b) //Make x such that a < x < b
 {
 	if (x < a) { return a; }
 	if (x > b) { return b; }
 	return x;
 }
 
-double random_double(double low, double high, unsigned int dist)
+double random_double(double low, double high, unsigned int dist, std::default_random_engine &generator) //Random double between low and high with distribution dist
 {
-	assert(dist == LINEAR || dist == EXP);
+	assert(dist == LINEAR || dist == EXP || dist == NORMAL);
 	double r = -1;
 	if (dist == LINEAR)
 	{
-		r = rand();
-		r /= RAND_MAX;
-		r *= high - low;
-		r += low;
+		std::uniform_real_distribution<double> distribution(low, high);
+		r = distribution(generator);
 	}
 	else if (dist == EXP)
 	{
+		double lambda = -1.0 * log(0.001) / (high - low); //Make it such that 99.9% of numbers lie from 0 to (high - low)
+		std::exponential_distribution<double> distribution(lambda);
 		do
 		{
-			r = rand();
-			r /= RAND_MAX;
-			r = log(r) * -0.5 * (high - low);
-		} while (r > high || r < low);
+			r = distribution(generator) + low;
+		} while (r > high || r < low); //Boundary check
+	}
+	else if (dist == NORMAL)
+	{
+		double center = (high + low) / 2.0;
+		double deviation = (high - low) / 6.0; // +/- 3 std. devs
+		std::normal_distribution<double> distribution(center, deviation);
+		do
+		{
+			r = distribution(generator);
+		} while (r > high || r < low); //Boundary check
 	}
 	else
 	{
@@ -147,28 +167,29 @@ double random_double(double low, double high, unsigned int dist)
 	return r;
 }
 
-vector random_vector(double low, double high)
+vector random_vector(double low, double high, std::default_random_engine &generator) //Random vector, used for cubic generation
 {
-	vector rv = vector(random_double(low, high, LINEAR), random_double(low, high, LINEAR), random_double(low, high, LINEAR));
+	vector rv = vector(random_double(low, high, LINEAR, generator), random_double(low, high, LINEAR, generator), random_double(low, high, LINEAR, generator));
 	return rv;
 }
 
-void generate_particle(settings &s, std::vector<particle*> &particles)
+void generate_particle(settings &s, std::vector<particle*> &particles, std::default_random_engine &generator) //Generates a particle with the specified settings
 {
-	vector null = vector(0, 0, 0);
-	double mass = random_double(s.min_mass, s.max_mass, s.mass_dist);
+	assert(s.gen_type == SPHERE || s.gen_type == SHELL || s.gen_type == CUBE);
+	vector null = vector(0, 0, 0); //Used to set acceleration to zero
+	double mass = random_double(s.min_mass, s.max_mass, s.mass_dist, generator);
 	assert(mass != -1);
 	particle *par = NULL;
-	assert(s.scale_x >= 0 && s.scale_x <= 1);
-	assert(s.scale_y >= 0 && s.scale_y <= 1);
-	assert(s.scale_z >= 0 && s.scale_z <= 1);
+	assert(s.scale_x >= 0);
+	assert(s.scale_y >= 0);
+	assert(s.scale_z >= 0);
 	if (s.gen_type == CUBE)
 	{
-		vector temp = random_vector(-1*(s.size/2), s.size/2);
+		vector temp = random_vector(-1*(s.size/2), s.size/2, generator);
 		temp.scale(s.scale_x, s.scale_y, s.scale_z);
-		vector vel = random_vector(-1, 1);
+		vector vel = random_vector(-1, 1, generator);
 		vel.normalize();
-		vel *= random_double(s.min_vel, s.max_vel, s.vel_dist);
+		vel *= random_double(s.min_vel, s.max_vel, s.vel_dist, generator);
 		par = new particle(&temp, &vel, &null, mass);
 	}
 	else if (s.gen_type == SPHERE || s.gen_type == SHELL)
@@ -176,16 +197,16 @@ void generate_particle(settings &s, std::vector<particle*> &particles)
 		double radius = -1;
 		if (s.gen_type == SPHERE)
 		{
-			radius = random_double(0, 1, LINEAR);
-			radius = sqrt(radius) * s.r_sphere;
+			radius = random_double(0, 1, LINEAR, generator);
+			radius = cbrt(radius) * s.r_sphere; //volume is proportional to the cube of the radius
 		}
 		else if (s.gen_type == SHELL)
 		{
 			radius = s.r_sphere;
 		}
 		assert(radius != -1);
-		double theta = random_double(0, 6.28318530718, LINEAR);
-		double azimuth = acos(random_double(-1, 1, LINEAR));
+		double theta = random_double(0, 6.28318530718, LINEAR, generator);
+		double azimuth = acos(random_double(-1, 1, LINEAR, generator));
 		vector point = vector(radius * sin(azimuth) * cos(theta), radius * sin(azimuth) * sin(theta), radius * cos(azimuth));
 		point.scale(s.scale_x, s.scale_y, s.scale_z);
 		vector rotation = s.rotation_vector;
@@ -198,72 +219,57 @@ void generate_particle(settings &s, std::vector<particle*> &particles)
 	particles.push_back(par);
 }
 
-void check_tree(std::vector<particle*> &particles, octree *root)
+bool file_exists(const char *filename) //Check if a file exists
 {
-	for (unsigned int i = 0; i < particles.size(); i++)
-	{
-		if (!root -> inside(particles[i]))
-		{
-			delete particles[i];
-			particles.erase(particles.begin() + i);
-			i--;
-		}
-	}
+	std::ifstream ifile(filename);
+	return ifile;
 }
 
-void update_all(std::vector<particle*> &particles, double dt)
+std::string gen_filename(unsigned int frame, bool binary) //Generate text / binary filename
 {
-	for (unsigned int i = 0; i < particles.size(); i++) { particles[i] -> update(dt); }
+	std::string filename = std::to_string(frame);
+	while (filename.length() < 4) { filename.insert(0, "0"); }
+	filename.insert(0, "./data/");
+	if (binary) { filename += ".dat"; }
+	else { filename += ".txt"; }
+	return filename;
 }
 
-void *update_all(void *data)
+std::string gen_image(unsigned int frame) //Generate image filename
 {
-	struct update_data *args;
-	args = (struct update_data*) data;
-	for (unsigned int i = args -> start; i < args -> end; i++) { (*(args -> particles))[i] -> update(args -> dt); }
-	pthread_exit(NULL);
+	std::string filename = std::to_string(frame);
+	while (filename.length() < 4) { filename.insert(0, "0"); }
+	filename.insert(0, "./img/");
+	filename += ".png";
+	return filename;
 }
 
-double update_all(std::vector<particle*> &particles, double max_vel_change, double max_pos_change)
-{
-	double max_vel = 0;
-	double max_pos = 0;
-	double temp_vel = -1;
-	double temp_pos = -1;
-	double dt = -1;
-	for (unsigned int i = 0; i < particles.size(); i++)
-	{
-		particles[i] -> update(temp_vel, temp_pos);
-		if (temp_vel > max_vel) { max_vel = temp_vel; }
-		if (temp_pos > max_pos) { max_pos = temp_pos; }
-	}
-	if ((max_vel_change / max_vel) < (max_pos_change / max_pos)) { dt = (max_vel_change / max_vel); }
-	else { dt = (max_pos_change / max_pos); }
-	return dt;
-}
+/*******************\
+| Gravity functions |
+\*******************/
 
-vector gravity(particle* par, octree* node, bool damping)
+vector gravity(particle* par, octree* node, bool damping) //Calculate the force acting on a particle from a node
 {
-	if (par == node -> get_particle()) { return vector(0, 0, 0); }
-	vector acc = *(node -> get_com());
-	acc -= *(par -> get_pos());
+	if (par == node -> get_particle()) { return vector(0, 0, 0); } //Particles exert no force on themselves
+	vector acc = *(node -> get_com()); //This vector is multipurpose
+	acc -= *(par -> get_pos()); //Here it is used as vector fromp particle to node (radius)
 	double r_sq;
 	if (!damping)
 	{
-		r_sq = pow(acc.magnitude(), -2);
+		r_sq = pow(acc.magnitude(), -2); // 1/r^2 no damping
 	}
 	else
 	{
-		r_sq = 1.0 / (pow(acc.magnitude(), 2) + exp(-1 * acc.magnitude()));
+		r_sq = 1.0 / (pow(acc.magnitude(), 2) + exp(-1 * acc.magnitude())); //1 / (r^2 + exp(-r)) damped
 	}
-	acc.normalize();
-	acc *= node -> get_mass();
-	acc *= 6.67384e-11;
+	acc.normalize(); //Unit vector indicating direction of force
+	acc *= node -> get_mass(); //Don't need particle mass, f=ma=GmM/r^2 cancels this out
+	acc *= 6.67384e-11; //Newton's gravitational constant
 	acc *= r_sq;
 	return acc;
 }
 
-void *barnes_hut_thread(void *data)
+void *barnes_hut_thread(void *data) //Thread that calculates Barnes-Hut algorithm on a subset of particles
 {
 	struct thread_data *args;
 	args = (struct thread_data*) data;
@@ -279,9 +285,9 @@ void *barnes_hut_thread(void *data)
 	unsigned int completed = 0;
 	for (unsigned int i = (args -> start); i < (args -> end); i++)
 	{
-		if (args -> thread_id == 0 && args -> print && i % 10 == 0)
+		if (args -> thread_id == 0 && args -> print && i % 100 == 0) //Thread 0 displays its progress because mutex locks
 		{
-			completed += 10 * particles -> size() / args -> end;
+			completed += 100 * particles -> size() / args -> end;
 			percent = completed * 100;
 			percent /= args ->  num_particles;
 			printf("\b\b\b\b\b\b\b%3.2f%%", percent);
@@ -289,7 +295,7 @@ void *barnes_hut_thread(void *data)
 		curr = (*particles)[i];
 		curr -> set_acc_zero();
 		nodes.push(root);
-		while (!nodes.empty())
+		while (!nodes.empty()) //Read wikipedia if you want to know the details of how this works
 		{
 			node = nodes.front();
 			nodes.pop();
@@ -320,7 +326,14 @@ void barnes_hut_threaded(struct settings &config, std::vector<particle*> &partic
 		td[i].particles = &particles;
 		td[i].root = root;
 		td[i].start = (particles.size() / config.threads) * i;
-		td[i].end = (particles.size() / config.threads) * (i + 1);
+		if (i == config.threads - 1) //Make sure that every last particle is updated
+		{
+			td[i].end = particles.size();
+		}
+		else
+		{
+			td[i].end = (particles.size() / config.threads) * (i + 1);
+		}
 		td[i].theta = config.theta;
 		td[i].damping = config.damping;
 		td[i].print = config.display_progress;
@@ -331,50 +344,28 @@ void barnes_hut_threaded(struct settings &config, std::vector<particle*> &partic
 	{
 		pthread_join(threads[i], NULL);
 	}
-	if (config.display_progress)
+	if (config.display_progress) //Get rid of that last print statement
 	{
 		printf("\b\b\b\b\b\b\b");
 	}
-	delete[] threads;
+	delete[] threads; //Memory management
 	delete[] td;
 }
 
-bool file_exists(const char *filename)
-{
-	std::ifstream ifile(filename);
-	return ifile;
-}
-
-std::string gen_filename(unsigned int frame, bool binary)
-{
-	std::string filename = std::to_string(frame);
-	while (filename.length() < 4) { filename.insert(0, "0"); }
-	filename.insert(0, "./data/");
-	if (binary) { filename += ".dat"; }
-	else { filename += ".txt"; }
-	return filename;
-}
-
-std::string gen_image(unsigned int frame)
-{
-	std::string filename = std::to_string(frame);
-	while (filename.length() < 4) { filename.insert(0, "0"); }
-	filename.insert(0, "./img/");
-	filename += ".png";
-	return filename;
-}
+/****************\
+| Data functions |
+\****************/
 
 void write_image(unsigned int img_w, unsigned int img_h, unsigned int projection, double scale, double brightness, unsigned int frame, std::vector<particle*> &particles)
 {
-	FIBITMAP *image = FreeImage_Allocate(img_w, img_h, 24);
-	RGBQUAD color;
+	FIBITMAP *image = FreeImage_Allocate(img_w, img_h, 24); //Image allocation, wxh, 24bpp
+	RGBQUAD color; //Color variable
 	if (!image)
 	{
 		std::cerr << "Can't allocate memory for image. Exiting." << std::endl;
 		exit(1);
 	}
-	//double *temp = new double[img_w*img_h];
-	std::vector<std::vector<double> > temp(img_w, std::vector<double>(img_h));
+	std::vector<std::vector<double> > temp(img_w, std::vector<double>(img_h)); //Temporary double array for more precise coloring
 	for (unsigned int i = 0; i < img_w; i++)
 	{
 		for (unsigned int j = 0; j < img_h; j++)
@@ -383,10 +374,10 @@ void write_image(unsigned int img_w, unsigned int img_h, unsigned int projection
 		}
 	}
 	assert(projection == FRONT || projection == SIDE || projection == TOP || projection == ISO);
-	double x = 0;
+	double x = 0; //XY position of current particle
 	double y = 0;
-	int v = 0;
-	if (projection == ISO) { scale *= 2.0; }
+	int v = 0; //Value variable
+	if (projection == ISO) { scale *= 2.0; } //Isometric projection shrinks scale by 2, compensate for this
 	for (unsigned int i = 0; i < particles.size(); i++)
 	{
 		if (projection == FRONT)
@@ -409,38 +400,38 @@ void write_image(unsigned int img_w, unsigned int img_h, unsigned int projection
 			x = ((sqrt(3) / 2.0) * (particles[i] -> get_pos() -> get_x() - particles[i] -> get_pos() -> get_y()) + img_w) / 2.0;
 			y = ((-0.5) * (particles[i] -> get_pos() -> get_x() + particles[i] -> get_pos() -> get_y() + 2 * particles[i] -> get_pos() -> get_z()) + img_h) / 2.0;
 		}
-		x += (x - (img_w / 2)) * (scale - 1);
+		x += (x - (img_w / 2)) * (scale - 1); //Scaling
 		y += (y - (img_h / 2)) * (scale - 1);
-		x = clamp(0, x, img_w - 1);
+		x = clamp(0, x, img_w - 1); //Make sure it's inside the image
 		y = clamp(0, y, img_h - 1);
-		if (projection == ISO) { y = (img_h - 1) - y; } //I'm not quite sure why but the image flipped upside down
-		temp[(int) x][(int) y] += brightness;
+		if (projection == ISO) { y = (img_h - 1) - y; } //I'm not quite sure why but the image flipped upside down in isometric
+		temp[(int) x][(int) y] += brightness; //Store value into array
 	}
 	for (unsigned int x_i = 0; x_i < img_w; x_i++)
 	{
 		for (unsigned int y_i = 0; y_i < img_h; y_i++)
 		{
-			v = (int) clamp(0, temp[x_i][y_i], 255);
+			v = (int) clamp(0, temp[x_i][y_i], 255); //Cast to int and clamp to sane values
 			color.rgbRed = v;
 			color.rgbBlue = v;
 			color.rgbGreen = v;
-			FreeImage_SetPixelColor(image, x_i, y_i, &color);
+			FreeImage_SetPixelColor(image, x_i, y_i, &color); //Set pixel
 		}
 	}
-	if (!FreeImage_Save(FIF_PNG, image, gen_image(frame).c_str(), 0))
+	if (!FreeImage_Save(FIF_PNG, image, gen_image(frame).c_str(), 0)) //Make sure the image is saved
 	{
 		std::cerr << "Cannot save " << gen_image(frame) << ". Exiting." << std::endl;
 		exit(1);
 	}
-	FreeImage_Unload(image);
+	FreeImage_Unload(image); //Deallocate memory from image
 }
 
-void *dump(void *data)
+void *dump(void *data) //Data dumping thread
 {
 	struct file_write_data *args;
 	args = (struct file_write_data*) data;
 	unsigned int size = sizeof(particle);
-	unsigned int frame = args -> frame;
+	unsigned int frame = args -> frame; //Decompress arg pointers into local data for easier access
 	unsigned int img_w = args -> img_w;
 	unsigned int img_h = args -> img_h;
 	unsigned int projection = args -> projection;
@@ -455,19 +446,26 @@ void *dump(void *data)
 	std::vector<particle*> *particles = args -> particles;
 	std::string bfilename = gen_filename(frame, true);
 	std::string tfilename = gen_filename(frame, false);
-	if (!overwrite && file_exists(bfilename.c_str()))
+	std::string ifilename = gen_image(frame);
+	if (!overwrite && file_exists(bfilename.c_str())) //Overwrite checks
 	{
 		std::cerr << "Overwrite disabled, cannot overwrite " << bfilename << ". Aborting." << std::endl;
 		exit(1);
 	}
+	else if (file_exists(bfilename.c_str())) { assert(remove(bfilename.c_str()) == 0); } //Delete if no overwrite
 	if (!overwrite && file_exists(tfilename.c_str()))
 	{
 		std::cerr << "Overwrite disabled, cannot overwrite " << tfilename << ". Aborting." << std::endl;
 		exit(1);
 	}
-	if (file_exists(bfilename.c_str())) { assert(remove(bfilename.c_str()) == 0); }
-	if (file_exists(tfilename.c_str())) { assert(remove(tfilename.c_str()) == 0); }
-	if (!keep_prev_binary && frame > 0)
+	else if (file_exists(tfilename.c_str())) { assert(remove(tfilename.c_str()) == 0); }
+	if (!overwrite && file_exists(ifilename.c_str()))
+	{
+		std::cerr << "Overwrite disabled, cannot overwrite " << ifilename << ". Aborting." << std::endl;
+		exit(1);
+	}
+	else if (file_exists(ifilename.c_str())) { assert(remove(ifilename.c_str()) == 0); }
+	if (!keep_prev_binary && frame > 0) //Delete last data if it exists
 	{
 		if (file_exists(gen_filename(frame - 1, true).c_str())) { assert(remove(gen_filename(frame - 1, true).c_str()) == 0); }
 	}
@@ -475,7 +473,7 @@ void *dump(void *data)
 	{
 		if (file_exists(gen_filename(frame - 1, false).c_str())) { assert(remove(gen_filename(frame - 1, false).c_str()) == 0); }
 	}
-	if (binary)
+	if (binary) //Dump binary data
 	{
 		std::fstream boutfile(bfilename, std::ios::out | std::ios::binary);
 		boutfile.seekp(0);
@@ -483,7 +481,7 @@ void *dump(void *data)
 		boutfile.flush();
 		boutfile.close();
 	}
-	if (text)
+	if (text) //Dump text data
 	{
 		vector temp;
 		std::fstream toutfile(tfilename, std::ios::out);
@@ -496,14 +494,33 @@ void *dump(void *data)
 		toutfile.flush();
 		toutfile.close();
 	}
-	if (image)
+	if (image) //Dump image
 	{
 		write_image(img_w, img_h, projection, scale, brightness, frame, *particles);
 	}
 	pthread_exit(NULL);
 }
 
-unsigned int read_data(std::vector<particle*> &particles, unsigned int num_frames)
+void dump_threaded(struct settings &config, unsigned int frame, std::vector<particle*> &particles, pthread_t &file_thread) //Data dumping call
+{
+	struct file_write_data fd; //Set up args
+	fd.particles = &particles;
+	fd.frame = frame;
+	fd.binary = config.dump_binary;
+	fd.text = config.dump_text;
+	fd.overwrite = config.overwrite_data;
+	fd.keep_prev_binary = config.keep_previous_binary;
+	fd.keep_prev_text = config.keep_previous_text;
+	fd.img_w = config.img_w;
+	fd.img_h = config.img_h;
+	fd.projection = config.projection;
+	fd.scale = config.scale;
+	fd.brightness = config.brightness;
+	fd.image = config.dump_image;
+	create_thread(&file_thread, NULL, dump, (void*) &fd); //No thread joining here, thread is defined in main function and is joined there
+}
+
+unsigned int read_data(std::vector<particle*> &particles, unsigned int num_frames) //Read data back into particles
 {
 	assert (particles.size() == 0);
 	unsigned int size = sizeof(particle);
@@ -526,49 +543,11 @@ unsigned int read_data(std::vector<particle*> &particles, unsigned int num_frame
 	return frame + 1;
 }
 
-octree* gen_root(std::vector<particle*> &particles)
-{
-	double min_x =  1e6;
-	double min_y =  1e6;
-	double min_z =  1e6;
-	double max_x = -1e6;
-	double max_y = -1e6;
-	double max_z = -1e6;
-	double size;
-	vector origin;
-	vector temp;
-	for (unsigned int i = 0; i < particles.size(); i++)
-	{
-		temp = *(particles[i] -> get_pos());
-		if (temp.get_x() < min_x) { min_x = temp.get_x(); }
-		if (temp.get_x() > max_x) { max_x = temp.get_x(); }
-		if (temp.get_y() < min_y) { min_y = temp.get_y(); }
-		if (temp.get_y() > max_y) { max_y = temp.get_y(); }
-		if (temp.get_z() < min_z) { min_z = temp.get_z(); }
-		if (temp.get_z() > max_z) { max_z = temp.get_z(); }
-	}
-	origin = vector((min_x + max_x) / 2.0, (min_y + max_y) / 2.0, (min_z + max_z) / 2.0);
-	if ((max_x - min_x) > (max_y - min_y) && (max_x - min_x) > (max_z - min_z))
-	{
-		size = (max_x - min_x) + 2.0;
-	}
-	else if ((max_y - min_y) > (max_x - min_x) && (max_y - min_y) > (max_z - min_z))
-	{
-		size = (max_y - min_y) + 2.0;
-	}
-	else
-	{
-		size = (max_z - min_z) + 2.0;
-	}
-	octree* root = new octree(&origin, size);
-	for (unsigned int i = 0; i < particles.size(); i++)
-	{
-		root -> add_particle(particles[i]);
-	}
-	return root;
-}
+/************************\
+| Housekeeping functions |
+\************************/
 
-void *gen_root_thread(void *data)
+void *gen_root_thread(void *data) //Thread for generating root
 {
 	struct generate_data *args;
 	args = (struct generate_data*) data;
@@ -578,33 +557,34 @@ void *gen_root_thread(void *data)
 	unsigned int added = 0;
 	for (unsigned int i = 0; i < particles -> size(); i++)
 	{
-		if (target -> inside((*particles)[i]))
+		if (target -> inside((*particles)[i])) //Make sure the particle is inside the thing you're adding it to
 		{
 			target -> add_particle((*particles)[i]);
 			added ++;
 		}
 	}
-	if (added == 0)
+	if (added == 0) //Empty nodes shouldn't be allocated, though I can't really see a case where this would happen
 	{
 		delete target;
+		target = NULL;
 	}
 	pthread_exit(NULL);
 }
 
-octree* gen_root_threaded(std::vector<particle*> &particles)
+octree* gen_root_threaded(std::vector<particle*> &particles) //Root generation call
 {
-	double min_x =  1e6;
-	double min_y =  1e6;
-	double min_z =  1e6;
-	double max_x = -1e6;
-	double max_y = -1e6;
-	double max_z = -1e6;
+	double min_x = std::numeric_limits<double>::max(); //If your particles go beyond this then you have a problem
+	double min_y = std::numeric_limits<double>::max();
+	double min_z = std::numeric_limits<double>::max();
+	double max_x = std::numeric_limits<double>::lowest(); //lowest is negative max, min is very close to zero
+	double max_y = std::numeric_limits<double>::lowest();
+	double max_z = std::numeric_limits<double>::lowest();
 	double size;
 	vector origin;
 	vector temp;
 	pthread_t threads[8];
 	struct generate_data data[8];
-	for (unsigned int i = 0; i < particles.size(); i++)
+	for (unsigned int i = 0; i < particles.size(); i++) //Find bounds of particles
 	{
 		temp = *(particles[i] -> get_pos());
 		if (temp.get_x() < min_x) { min_x = temp.get_x(); }
@@ -615,7 +595,7 @@ octree* gen_root_threaded(std::vector<particle*> &particles)
 		if (temp.get_z() > max_z) { max_z = temp.get_z(); }
 	}
 	origin = vector((min_x + max_x) / 2.0, (min_y + max_y) / 2.0, (min_z + max_z) / 2.0);
-	if ((max_x - min_x) > (max_y - min_y) && (max_x - min_x) > (max_z - min_z))
+	if ((max_x - min_x) > (max_y - min_y) && (max_x - min_x) > (max_z - min_z)) //Make sure the octree is cubic (this may be changed later)
 	{
 		size = (max_x - min_x) + 2.0;
 	}
@@ -627,68 +607,58 @@ octree* gen_root_threaded(std::vector<particle*> &particles)
 	{
 		size = (max_z - min_z) + 2.0;
 	}
-	octree* root = new octree(&origin, size);
-	for (unsigned int i = 0; i < 8; i++)
+	octree* root = new octree(&origin, size); //Allocate new root
+	for (unsigned int i = 0; i < 8; i++) //Allocate the children & call new threads
 	{
 		root -> allocate_child(i);
 		data[i].target = root -> get_child(i);
 		data[i].particles = &particles;
 		create_thread(&threads[i], NULL, gen_root_thread, (void*) &data[i]);
 	}
-	for (unsigned int i = 0; i < 8; i++)
+	for (unsigned int i = 0; i < 8; i++) //Wait for completion
 	{
 		pthread_join(threads[i], NULL);
 	}
 	return root;
 }
 
-void update_all_threaded(struct settings &config, std::vector<particle*> &particles)
+void *update_all_thread(void *data) //Thread for updating particle positions & velocities
 {
-	pthread_t *threads = new pthread_t[config.threads];
+	struct update_data *args;
+	args = (struct update_data*) data;
+	for (unsigned int i = args -> start; i < args -> end; i++) { (*(args -> particles))[i] -> update(args -> dt); }
+	pthread_exit(NULL);
+}
+
+void update_all_threaded(struct settings &config, std::vector<particle*> &particles) //Update call
+{
+	pthread_t *threads = new pthread_t[config.threads]; //Allocate threads & args
 	struct update_data *ud = new update_data[config.threads];
-	for (unsigned int i = 0; i < config.threads; i++)
+	for (unsigned int i = 0; i < config.threads; i++) //Distribute work
 	{
 		ud[i].particles = &particles;
 		ud[i].start = (particles.size() / config.threads) * i;
-		ud[i].end = (particles.size() / config.threads) * (i + 1);
+		if (i == config.threads - 1) { ud[i].end = particles.size(); }
+		else { ud[i].end = (particles.size() / config.threads) * (i + 1); }
 		ud[i].dt = config.dt;
-		create_thread(&threads[i], NULL, update_all, (void*) &ud[i]);
+		create_thread(&threads[i], NULL, update_all_thread, (void*) &ud[i]);
 	}
-	for (unsigned int i = 0; i < config.threads; i++)
+	for (unsigned int i = 0; i < config.threads; i++) //Wait for completion
 	{
 		pthread_join(threads[i], NULL);
 	}
-	delete[] threads;
+	delete[] threads; //Memory management
 	delete[] ud;
 }
 
-void dump_threaded(struct settings &config, unsigned int frame, std::vector<particle*> &particles, pthread_t &file_thread)
-{
-	struct file_write_data fd; 
-	fd.particles = &particles;
-	fd.frame = frame;
-	fd.binary = config.dump_binary;
-	fd.text = config.dump_text;
-	fd.overwrite = config.overwrite_data;
-	fd.keep_prev_binary = config.keep_previous_binary;
-	fd.keep_prev_text = config.keep_previous_text;
-	fd.img_w = config.img_w;
-	fd.img_h = config.img_h;
-	fd.projection = config.projection;
-	fd.scale = config.scale;
-	fd.brightness = config.brightness;
-	fd.image = config.dump_image;
-	create_thread(&file_thread, NULL, dump, (void*) &fd);
-}
-
-void *delete_root_thread(void* obj)
+void *delete_root_thread(void* obj) //Thread for deleting root
 {
 	octree* target = (octree*) obj;
 	delete target;
 	pthread_exit(NULL);
 }
 
-void delete_root_threaded(octree *root)
+void delete_root_threaded(octree *root) //Delete root call
 {
 	pthread_t threads[8];
 	octree* objs[8];
@@ -707,7 +677,11 @@ void delete_root_threaded(octree *root)
 	delete root;
 }
 
-void read_settings(settings &s, const char* sfile)
+/********************\
+| Settings functions |
+\********************/
+
+void read_settings(settings &s, const char* sfile) //Read config file
 {
 	std::cout << "Reading config file " << sfile << std::endl;
 	std::string var;
@@ -808,6 +782,7 @@ void read_settings(settings &s, const char* sfile)
 				s.mass_dist = 128;
 				if (var.compare("linear") == 0) { s.mass_dist = LINEAR; }
 				else if (var.compare("exp") == 0) { s.mass_dist = EXP; }
+				else if (var.compare("normal") == 0) { s.mass_dist = NORMAL; }
 				assert(s.mass_dist != 128);
 			}
 			else if (var.compare("vel_dist") == 0)
@@ -816,6 +791,7 @@ void read_settings(settings &s, const char* sfile)
 				s.vel_dist = 128;
 				if (var.compare("linear") == 0) { s.vel_dist = LINEAR; }
 				else if (var.compare("exp") == 0) { s.vel_dist = EXP; }
+				else if (var.compare("normal") == 0) { s.vel_dist = NORMAL; }
 				assert(s.vel_dist != 128);
 			}
 			else if (var.compare("projection") == 0)
@@ -844,8 +820,6 @@ void read_settings(settings &s, const char* sfile)
 			else if (var.compare("max_mass") == 0) { cfg >> s.max_mass; }
 			else if (var.compare("min_vel") == 0) { cfg >> s.min_vel; }
 			else if (var.compare("max_vel") == 0) { cfg >> s.max_vel; }
-			else if (var.compare("max_vel_change") == 0) { cfg >> s.max_vel_change; }
-			else if (var.compare("max_pos_change") == 0) { cfg >> s.max_pos_change; }
 			else if (var.compare("brightness") == 0) { cfg >> s.brightness; }
 			else if (var.compare("img_w") == 0) { cfg >> s.img_w; }
 			else if (var.compare("img_h") == 0) { cfg >> s.img_h; }
@@ -860,7 +834,7 @@ void read_settings(settings &s, const char* sfile)
 	}
 }
 
-void set_default(settings &s)
+void set_default(settings &s) //Set settings to default values
 {
 	s.read_existing = false;
 	s.use_seed = false;
@@ -882,8 +856,6 @@ void set_default(settings &s)
 	s.max_mass = 5e11;
 	s.min_vel = 0;
 	s.max_vel = 0;
-	s.max_vel_change = 3;
-	s.max_pos_change = 3;
 	s.r_sphere = 100;
 	s.rotation_magnitude = 0.1;
 	s.rotation_vector = vector(0, 0, 1);
@@ -904,7 +876,7 @@ void set_default(settings &s)
 
 int main(int argc, char **argv)
 {
-	unsigned int start_frame = 0;
+	unsigned int start_frame = 0; //Set some values, read settings
 	unsigned int frame = 0;
 	bool first = true;
 	settings config;
@@ -922,7 +894,7 @@ int main(int argc, char **argv)
 		std::cerr << "Usage: " << argv[0] << " [settings file]" << std::endl;
 		exit(1);
 	}
-	unsigned long seed = 0;
+	unsigned long seed = 0; //Set up seed
 	if (config.use_seed)
 	{
 		seed = config.seed;
@@ -931,11 +903,12 @@ int main(int argc, char **argv)
 	{
 		seed = time(NULL);
 	}
-	srand(seed);
+	std::default_random_engine generator;
+	generator.seed(seed);
 	octree* root;
 	std::vector<particle*> particles;
 	pthread_t file_thread;
-	if (config.read_existing)
+	if (config.read_existing) //Read existing data
 	{
 		start_frame = read_data(particles, config.num_frames);
 		if (start_frame == 0)
@@ -947,20 +920,20 @@ int main(int argc, char **argv)
 			std::cout << "Resuming from " << start_frame << std::endl;
 		}
 	}
-	if (!config.read_existing || start_frame == 0)
+	if (!config.read_existing || start_frame == 0) //Generate particles if not resuming or no data
 	{
 		std::cout << "Seed: " << seed << std::endl;
 		std::cout << "Generating particles..." << std::endl;
 		for (unsigned int i = 0; i < config.num_particles; i++)
 		{
-			generate_particle(config, particles);
+			generate_particle(config, particles, generator);
 		}
 	}
 	frame = start_frame;
 	std::cout << "Frame " << frame << "/" << config.num_frames << std::endl;
 	assert(config.threads > 0);
-	FreeImage_Initialise();
-	while (frame < config.num_frames)
+	FreeImage_Initialise(); //Init freeimage
+	while (frame < config.num_frames) //Main loop
 	{
 		if (config.verbose) { std::cout << "Generating root..." << std::endl; }
 		root = gen_root_threaded(particles);
@@ -970,7 +943,7 @@ int main(int argc, char **argv)
 		root -> calc_com_threaded();
 		if (config.verbose) { std::cout << "Starting Barnes-Hut algorithm..." << std::endl; }
 		barnes_hut_threaded(config, particles, root);
-		if (first)
+		if (first) //pthread_join can't be called on uninitialized value file_thread
 		{
 			first = false;
 		}
@@ -990,12 +963,12 @@ int main(int argc, char **argv)
 		frame++;
 		std::cout << "Frame " << frame << "/" << config.num_frames << std::endl;
 	}
-	if (!first)
+	if (!first) //there's data to be written possibly
 	{
 		pthread_join(file_thread, NULL);
 	}
-	FreeImage_DeInitialise();
-	for (unsigned int i = 0; i < particles.size(); i++)
+	FreeImage_DeInitialise(); //Deinit freeimage
+	for (unsigned int i = 0; i < particles.size(); i++) //Deallocate particles
 	{
 		delete particles[i];
 	}
