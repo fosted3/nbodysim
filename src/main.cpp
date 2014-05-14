@@ -373,10 +373,14 @@ void write_image(unsigned int img_w, unsigned int img_h, unsigned int projection
 		std::cerr << "Can't allocate memory for image. Exiting." << std::endl;
 		exit(1);
 	}
-	double *temp = new double[img_w*img_h];
-	for (unsigned int i = 0; i < img_w * img_h; i++)
+	//double *temp = new double[img_w*img_h];
+	std::vector<std::vector<double> > temp(img_w, std::vector<double>(img_h));
+	for (unsigned int i = 0; i < img_w; i++)
 	{
-		temp[i] = 0;
+		for (unsigned int j = 0; j < img_h; j++)
+		{
+			temp[i][j] = 0;
+		}
 	}
 	assert(projection == FRONT || projection == SIDE || projection == TOP || projection == ISO);
 	double x = 0;
@@ -387,18 +391,18 @@ void write_image(unsigned int img_w, unsigned int img_h, unsigned int projection
 	{
 		if (projection == FRONT)
 		{
-			x = particles[i] -> get_pos() -> get_x();
-			y = particles[i] -> get_pos() -> get_z();
+			x = particles[i] -> get_pos() -> get_x() + (img_w / 2);
+			y = particles[i] -> get_pos() -> get_z() + (img_h / 2);
 		}
 		else if (projection == SIDE)
 		{
-			x = particles[i] -> get_pos() -> get_y();
-			y = particles[i] -> get_pos() -> get_z();
+			x = particles[i] -> get_pos() -> get_y() + (img_w / 2);
+			y = particles[i] -> get_pos() -> get_z() + (img_h / 2);
 		}
 		else if (projection == TOP)
 		{
-			x = particles[i] -> get_pos() -> get_x();
-			y = particles[i] -> get_pos() -> get_y();
+			x = particles[i] -> get_pos() -> get_x() + (img_w / 2);
+			y = particles[i] -> get_pos() -> get_y() + (img_h / 2);
 		}
 		else
 		{
@@ -409,20 +413,19 @@ void write_image(unsigned int img_w, unsigned int img_h, unsigned int projection
 		y += (y - (img_h / 2)) * (scale - 1);
 		x = clamp(0, x, img_w - 1);
 		y = clamp(0, y, img_h - 1);
-		temp[((int) x) + ((int) y) * img_h] += brightness;
+		temp[(int) x][(int) y] += brightness;
 	}
 	for (unsigned int x_i = 0; x_i < img_w; x_i++)
 	{
 		for (unsigned int y_i = 0; y_i < img_h; y_i++)
 		{
-			v = (int) clamp(0, temp[x_i + y_i * img_h], 255);
+			v = (int) clamp(0, temp[x_i][y_i], 255);
 			color.rgbRed = v;
 			color.rgbBlue = v;
 			color.rgbGreen = v;
 			FreeImage_SetPixelColor(image, x_i, y_i, &color);
 		}
 	}
-	delete[] temp;
 	if (!FreeImage_Save(FIF_PNG, image, gen_image(frame).c_str(), 0))
 	{
 		std::cerr << "Cannot save " << gen_image(frame) << ". Exiting." << std::endl;
