@@ -413,6 +413,7 @@ void write_image(unsigned int img_w, unsigned int img_h, unsigned int projection
 		y += (y - (img_h / 2)) * (scale - 1);
 		x = clamp(0, x, img_w - 1);
 		y = clamp(0, y, img_h - 1);
+		if (projection == ISO) { y = (img_h - 1) - y; } //I'm not quite sure why but the image flipped upside down
 		temp[(int) x][(int) y] += brightness;
 	}
 	for (unsigned int x_i = 0; x_i < img_w; x_i++)
