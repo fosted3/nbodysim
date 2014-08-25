@@ -8,6 +8,8 @@
 #define SIDE 1
 #define TOP 2
 #define ISO 3
+#define BW 0
+#define HEAT 1
 
 #include "thread_functions.h"
 #include "vector.h"
@@ -51,6 +53,7 @@ struct file_write_data //Used for writing data (binary, text, and image)
 	unsigned int img_w;
 	unsigned int img_h;
 	unsigned int projection;
+	unsigned int color;
 	double scale;
 	double brightness;
 	bool binary;
@@ -59,6 +62,8 @@ struct file_write_data //Used for writing data (binary, text, and image)
 	bool overwrite;
 	bool keep_prev_binary;
 	bool keep_prev_text;
+	bool adaptive;
+	bool nonlinear;
 	
 };
 
@@ -93,6 +98,8 @@ struct settings
 	bool keep_previous_text;	//Keep previous text file after writing
 	bool verbose;				//Display extra information
 	bool damping;				//Close interaction damping
+	bool adaptive_brightness;	//Adaptive brightness
+	bool nonlinear_brightness;	//Nonlinear brightness
 	unsigned int num_particles; //How many particles to generate if no resume present
 	unsigned int num_frames;	//How many frames to compute
 	unsigned int threads;		//How many threads to use for Barnes-Hut calculation
@@ -118,6 +125,7 @@ struct settings
 	unsigned int gen_type;		//How simulation generates particles (cube, sphere, shell)
 	unsigned int mass_dist;		//How mass is distributed (normal, exp, linear)
 	unsigned int vel_dist;		//How velocity is distrubuted in cubic mode (normal, exp, linear)
+	unsigned int color;			//Color mapping
 };
 
 /*******************\
@@ -133,7 +141,7 @@ double clamp(double a, double x, double b) //Make x such that a < x < b
 
 double random_double(double low, double high, unsigned int dist, std::default_random_engine &generator) //Random double between low and high with distribution dist
 {
-	assert(dist == LINEAR || dist == EXP || dist == NORMAL);
+	//assert(dist == LINEAR || dist == EXP || dist == NORMAL);
 	double r = -1;
 	if (dist == LINEAR)
 	{
@@ -161,7 +169,7 @@ double random_double(double low, double high, unsigned int dist, std::default_ra
 	}
 	else
 	{
-		std::cerr << "This shouldn't happen." << std::endl;
+		std::cerr << "Invalid random distribution specified." << std::endl;
 		exit(1);
 	}
 	return r;
@@ -175,7 +183,7 @@ vector random_vector(double low, double high, std::default_random_engine &genera
 
 void generate_particle(settings &s, std::vector<particle*> &particles, std::default_random_engine &generator) //Generates a particle with the specified settings
 {
-	assert(s.gen_type == SPHERE || s.gen_type == SHELL || s.gen_type == CUBE);
+	//assert(s.gen_type == SPHERE || s.gen_type == SHELL || s.gen_type == CUBE);
 	vector null = vector(0, 0, 0); //Used to set acceleration to zero
 	double mass = random_double(s.min_mass, s.max_mass, s.mass_dist, generator);
 	assert(mass != -1);
@@ -214,6 +222,11 @@ void generate_particle(settings &s, std::vector<particle*> &particles, std::defa
 		rotation *= s.rotation_magnitude;
 		vector velocity = cross(rotation, point);
 		par = new particle(&point, &velocity, &null, mass);
+	}
+	else
+	{
+		std::cerr << "Invalid generation type specified." << std::endl;
+		exit(1);
 	}
 	assert(par != NULL);
 	particles.push_back(par);
@@ -356,10 +369,10 @@ void barnes_hut_threaded(struct settings &config, std::vector<particle*> &partic
 | Data functions |
 \****************/
 
-void write_image(unsigned int img_w, unsigned int img_h, unsigned int projection, double scale, double brightness, unsigned int frame, std::vector<particle*> &particles)
+void write_image(unsigned int img_w, unsigned int img_h, unsigned int projection, unsigned int color, bool adaptive, bool nonlinear, double scale, double brightness, unsigned int frame, std::vector<particle*> &particles)
 {
 	FIBITMAP *image = FreeImage_Allocate(img_w, img_h, 24); //Image allocation, wxh, 24bpp
-	RGBQUAD color; //Color variable
+	RGBQUAD pixel; //Color variable
 	if (!image)
 	{
 		std::cerr << "Can't allocate memory for image. Exiting." << std::endl;
@@ -377,6 +390,7 @@ void write_image(unsigned int img_w, unsigned int img_h, unsigned int projection
 	double x = 0; //XY position of current particle
 	double y = 0;
 	int v = 0; //Value variable
+	double max = 0;
 	if (projection == ISO) { scale *= 2.0; } //Isometric projection shrinks scale by 2, compensate for this
 	for (unsigned int i = 0; i < particles.size(); i++)
 	{
@@ -402,20 +416,68 @@ void write_image(unsigned int img_w, unsigned int img_h, unsigned int projection
 		}
 		x += (x - (img_w / 2)) * (scale - 1); //Scaling
 		y += (y - (img_h / 2)) * (scale - 1);
-		x = clamp(0, x, img_w - 1); //Make sure it's inside the image
-		y = clamp(0, y, img_h - 1);
+		if (x < 0 || y < 0 || x > img_w - 1 || y > img_w - 1) { continue; }
+		//x = clamp(0, x, img_w - 1); //Make sure it's inside the image
+		//y = clamp(0, y, img_h - 1);
 		if (projection == ISO) { y = (img_h - 1) - y; } //I'm not quite sure why but the image flipped upside down in isometric
 		temp[(int) x][(int) y] += brightness; //Store value into array
+		if (temp[(int) x][(int) y] > max) { max = temp[(int) x][(int) y]; }
+	}
+	if (nonlinear)
+	{
+		max = sqrt(max);
+		for (unsigned int i = 0; i < img_w; i++)
+		{
+			for (unsigned int j = 0; j < img_h; j++)
+			{
+				temp[i][j] = sqrt(temp[i][j]);
+			}
+		}
 	}
 	for (unsigned int x_i = 0; x_i < img_w; x_i++)
 	{
 		for (unsigned int y_i = 0; y_i < img_h; y_i++)
 		{
-			v = (int) clamp(0, temp[x_i][y_i], 255); //Cast to int and clamp to sane values
-			color.rgbRed = v;
-			color.rgbBlue = v;
-			color.rgbGreen = v;
-			FreeImage_SetPixelColor(image, x_i, y_i, &color); //Set pixel
+			if (color == BW)
+			{
+				if (adaptive)
+				{
+					v = (int) clamp(0, temp[x_i][y_i] * 255.0 / max, 255);
+				}
+				else
+				{
+					v = (int) clamp(0, temp[x_i][y_i], 255); //Cast to int and clamp to sane values
+				}
+				pixel.rgbRed = v;
+				pixel.rgbBlue = v;
+				pixel.rgbGreen = v;
+				FreeImage_SetPixelColor(image, x_i, y_i, &pixel); //Set pixel
+			}
+			else if (color == HEAT)
+			{
+				if (adaptive)
+				{
+					v = (int) clamp(0, temp[x_i][y_i] * 511.0 / max, 511);
+				}
+				else
+				{
+					v = (int) clamp(0, temp[x_i][y_i], 511);
+				}
+				if (v < 256)
+				{
+					pixel.rgbBlue = clamp(0, 255 - v, 255);
+					pixel.rgbGreen = clamp(0, v, 255);
+					pixel.rgbRed = 0;
+				}
+				else
+				{
+					v -= 256;
+					pixel.rgbBlue = 0;
+					pixel.rgbGreen = clamp(0, 255 - v, 255);
+					pixel.rgbRed = clamp(0, v, 255);
+				}
+				FreeImage_SetPixelColor(image, x_i, y_i, &pixel);
+			}
 		}
 	}
 	if (!FreeImage_Save(FIF_PNG, image, gen_image(frame).c_str(), 0)) //Make sure the image is saved
@@ -435,12 +497,15 @@ void *dump(void *data) //Data dumping thread
 	unsigned int img_w = args -> img_w;
 	unsigned int img_h = args -> img_h;
 	unsigned int projection = args -> projection;
+	unsigned int color = args -> color;
 	bool overwrite = args -> overwrite;
 	bool keep_prev_binary = args -> keep_prev_binary;
 	bool keep_prev_text = args -> keep_prev_text;
 	bool binary = args -> binary;
 	bool text = args -> text;
 	bool image = args -> image;
+	bool adaptive = args -> adaptive;
+	bool nonlinear = args -> nonlinear;
 	double scale = args -> scale;
 	double brightness = args -> brightness;
 	std::vector<particle*> *particles = args -> particles;
@@ -496,7 +561,7 @@ void *dump(void *data) //Data dumping thread
 	}
 	if (image) //Dump image
 	{
-		write_image(img_w, img_h, projection, scale, brightness, frame, *particles);
+		write_image(img_w, img_h, projection, color, adaptive, nonlinear, scale, brightness, frame, *particles);
 	}
 	pthread_exit(NULL);
 }
@@ -517,6 +582,9 @@ void dump_threaded(struct settings &config, unsigned int frame, std::vector<part
 	fd.scale = config.scale;
 	fd.brightness = config.brightness;
 	fd.image = config.dump_image;
+	fd.color = config.color;
+	fd.adaptive = config.adaptive_brightness;
+	fd.nonlinear = config.nonlinear_brightness;
 	create_thread(&file_thread, NULL, dump, (void*) &fd); //No thread joining here, thread is defined in main function and is joined there
 }
 
@@ -757,6 +825,18 @@ void read_settings(settings &s, const char* sfile) //Read config file
 				if (var.compare("true") == 0) { s.damping = true; }
 				else { s.damping = false; }
 			}
+			else if (var.compare("adaptive_brightness") == 0)
+			{
+				cfg >> var;
+				if (var.compare("true") == 0) { s.adaptive_brightness = true; }
+				else { s.adaptive_brightness = false; }
+			}
+			else if (var.compare("nonlinear_brightness") == 0)
+			{
+				cfg >> var;
+				if (var.compare("true") == 0) { s.nonlinear_brightness = true; }
+				else { s.nonlinear_brightness = false; }
+			}
 			else if (var.compare("rotation_vector") == 0)
 			{
 				double x;
@@ -803,6 +883,14 @@ void read_settings(settings &s, const char* sfile) //Read config file
 				else if (var.compare("top") == 0) { s.projection = TOP; }
 				else if (var.compare("iso") == 0) { s.projection = ISO; }
 				assert(s.projection != 128);
+			}
+			else if (var.compare("color") == 0)
+			{
+				cfg >> var;
+				s.color = 128;
+				if (var.compare("bw") == 0) { s.color = BW; }
+				else if (var.compare("heat") == 0) { s.color = HEAT; }
+				assert(s.color != 128);
 			}
 			else if (var.compare("threads") == 0) { cfg >> s.threads; }
 			else if (var.compare("scale_x") == 0) { cfg >> s.scale_x; }
@@ -872,6 +960,9 @@ void set_default(settings &s) //Set settings to default values
 	s.img_w = 1920;
 	s.img_h = 1080;
 	s.scale = 1;
+	s.color = BW;
+	s.adaptive_brightness = false;
+	s.nonlinear_brightness = false;
 }
 
 int main(int argc, char **argv)
