@@ -1,5 +1,5 @@
 CC=g++
-CFLAGS=-c -Wall -g -O3 -std=c++11 -Wextra
+CFLAGS=-c -Wall -g -O3 -std=c++11 -Wextra -march=native -mtune=native
 LDFLAGS=-lpthread -lfreeimage
 EXECUTABLE=bin/nbodysim
 DIRS=bin/ build/
