@@ -121,7 +121,6 @@ void octree::print_info(unsigned int depth)
 
 void octree::add_particle(particle *par)
 {
-	assert(this -> inside(par));
 	if (this -> p == NULL)
 	{
 		bool leaf = true;
