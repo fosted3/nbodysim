@@ -365,6 +365,8 @@ void barnes_hut_threaded(struct settings &config, std::vector<particle*> &partic
 	delete[] td;
 }
 
+
+
 /****************\
 | Data functions |
 \****************/
@@ -688,6 +690,53 @@ octree* gen_root_threaded(std::vector<particle*> &particles) //Root generation c
 		pthread_join(threads[i], NULL);
 	}
 	return root;
+}
+octree* gen_root(std::vector<particle*> &particles)
+{
+	double min_x = std::numeric_limits<double>::max(); //If your particles go beyond this then you have a problem
+	double min_y = std::numeric_limits<double>::max();
+	double min_z = std::numeric_limits<double>::max();
+	double max_x = std::numeric_limits<double>::lowest(); //lowest is negative max, min is very close to zero
+	double max_y = std::numeric_limits<double>::lowest();
+	double max_z = std::numeric_limits<double>::lowest();
+	double size;
+	vector origin;
+	vector temp;
+	for (unsigned int i = 0; i < particles.size(); i++) //Find bounds of particles
+	{
+		temp = *(particles[i] -> get_pos());
+		if (temp.get_x() < min_x) { min_x = temp.get_x(); }
+		if (temp.get_x() > max_x) { max_x = temp.get_x(); }
+		if (temp.get_y() < min_y) { min_y = temp.get_y(); }
+		if (temp.get_y() > max_y) { max_y = temp.get_y(); }
+		if (temp.get_z() < min_z) { min_z = temp.get_z(); }
+		if (temp.get_z() > max_z) { max_z = temp.get_z(); }
+	}
+	origin = vector((min_x + max_x) / 2.0, (min_y + max_y) / 2.0, (min_z + max_z) / 2.0);
+	if ((max_x - min_x) > (max_y - min_y) && (max_x - min_x) > (max_z - min_z)) //Make sure the octree is cubic (this may be changed later)
+	{
+		size = (max_x - min_x) + 2.0;
+	}
+	else if ((max_y - min_y) > (max_x - min_x) && (max_y - min_y) > (max_z - min_z))
+	{
+		size = (max_y - min_y) + 2.0;
+	}
+	else
+	{
+		size = (max_z - min_z) + 2.0;
+	}
+	octree* root = new octree(&origin, size); //Allocate new root
+	for (unsigned int i = 0; i < particles.size(); i++)
+	{
+		root -> add_particle(particles[i]);
+	}
+	return root;
+}
+
+void update_all(struct settings &config, std::vector<particle*> &particles)
+{
+	double dt = config.dt;
+	for (unsigned int i = 0; i < particles.size(); i++) { particles[i] -> update(dt); }
 }
 
 void *update_all_thread(void *data) //Thread for updating particle positions & velocities
@@ -1027,29 +1076,35 @@ int main(int argc, char **argv)
 	while (frame < config.num_frames) //Main loop
 	{
 		if (config.verbose) { std::cout << "Generating root..." << std::endl; }
-		root = gen_root_threaded(particles);
+		if (config.threads > 1) { root = gen_root_threaded(particles); }
+		else { root = gen_root(particles); }
 		if (config.verbose) { std::cout << "Calculating masses of nodes..." << std::endl; }
-		root -> calc_mass_threaded();
+		if (config.threads > 1) { root -> calc_mass_threaded(); }
+		else { root -> calc_mass(); }
 		if (config.verbose) { std::cout << "Calculating COMs of nodes..." << std::endl; }
-		root -> calc_com_threaded();
+		if (config.threads > 1) { root -> calc_com_threaded(); }
+		else { root -> calc_com(); }
 		if (config.verbose) { std::cout << "Starting Barnes-Hut algorithm..." << std::endl; }
 		barnes_hut_threaded(config, particles, root);
 		if (first) //pthread_join can't be called on uninitialized value file_thread
 		{
 			first = false;
 		}
-		else if (config.dump_binary || config.dump_text || config.dump_image)
+		else if ((config.dump_binary || config.dump_text || config.dump_image) && config.threads > 1)
 		{
 			pthread_join(file_thread, NULL);
 		}
 		if (config.verbose) { std::cout << "Updating particles..." << std::endl; }
-		update_all_threaded(config, particles);
+		if (config.threads > 1) { update_all_threaded(config, particles); }
+		else { update_all(config, particles); }
 		if (config.verbose) { std::cout << "Deallocating nodes..." << std::endl; }
-		delete_root_threaded(root);
+		if (config.threads > 1) { delete_root_threaded(root); }
+		else { delete root; }
 		if (config.dump_binary || config.dump_text || config.dump_image)
 		{
 			if (config.verbose) { std::cout << "Dumping data..." << std::endl; }
 			dump_threaded(config, frame, particles, file_thread);
+			if (config.threads == 1) { pthread_join(file_thread, NULL); }
 		}
 		frame++;
 		std::cout << "Frame " << frame << "/" << config.num_frames << std::endl;
