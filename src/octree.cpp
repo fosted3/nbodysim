@@ -7,8 +7,16 @@
 //#include <stdlib.h>
 //#include <cmath>
 
+
+#ifdef DOUBLE
+#ifndef datatype
+#define datatype double
+#endif
+#endif
+#ifdef FLOAT
 #ifndef datatype
 #define datatype float
+#endif
 #endif
 
 octree::octree()

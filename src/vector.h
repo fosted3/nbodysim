@@ -1,8 +1,15 @@
 #ifndef vector_h_
 #define vector_h_
 
+#ifdef DOUBLE
+#ifndef datatype
+#define datatype double
+#endif
+#endif
+#ifdef FLOAT
 #ifndef datatype
 #define datatype float
+#endif
 #endif
 
 class vector
