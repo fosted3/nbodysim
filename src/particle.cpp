@@ -1,11 +1,15 @@
 #include "particle.h"
 #include <iostream>
 
+#ifndef datatype
+#define datatype float
+#endif
+
 particle::particle()
 {
 }
 
-particle::particle(vector *pos, vector *vel, vector *acc, double mas)
+particle::particle(vector *pos, vector *vel, vector *acc, datatype mas)
 {
 	this -> position = *pos;
 	this -> velocity = *vel;
@@ -21,7 +25,7 @@ particle::particle(particle &p)
 	this -> mass = p.mass;
 }
 
-double particle::get_mass(void)
+datatype particle::get_mass(void)
 {
 	return this -> mass;
 }
@@ -42,7 +46,7 @@ void particle::set_acc_offset(vector *off)
 	this -> acceleration += *off;
 }
 
-void particle::update(double dt)
+void particle::update(datatype dt)
 {
 	vector temp = this -> acceleration;
 	temp *= dt;
@@ -52,7 +56,7 @@ void particle::update(double dt)
 	this -> position += temp;
 }
 
-void particle::update(double &dv, double &dp)
+void particle::update(datatype &dv, datatype &dp)
 {
 	dv = this -> acceleration.magnitude();
 	dp = this -> velocity.magnitude();

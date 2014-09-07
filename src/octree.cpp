@@ -7,11 +7,15 @@
 //#include <stdlib.h>
 //#include <cmath>
 
+#ifndef datatype
+#define datatype float
+#endif
+
 octree::octree()
 {
 }
 
-octree::octree(vector *cen, double sid, octree *par)
+octree::octree(vector *cen, datatype sid, octree *par)
 {
 	this -> center = *cen;
 	this -> side = sid;
@@ -25,7 +29,7 @@ octree::octree(vector *cen, double sid, octree *par)
 	this -> mass = 0;
 }
 
-octree::octree(vector *cen, double sid)
+octree::octree(vector *cen, datatype sid)
 {
 	this -> center = *cen;
 	this -> side = sid;
@@ -49,11 +53,11 @@ void octree::allocate_child(unsigned int i)
 	 1 -1 -1  4
 	 1 -1  1  5
 	 1  1 -1  6
-	 1  1  1  7*/ 
+	 1  1  1  7*/
 	int x = -1;
 	int y = -1;
 	int z = -1;
-	double half = (this -> side) / 2;
+	datatype half = (this -> side) / 2;
 	if (i & 1)
 	{
 		x = 1;
@@ -101,7 +105,7 @@ void octree::print_info(void)
 	{
 		std::cout << std::endl;
 	}
-}	
+}
 
 void octree::print_info(unsigned int depth)
 {
@@ -130,7 +134,7 @@ void octree::add_particle(particle *par)
 			{
 				leaf = false;
 				break;
-			}	
+			}
 		}
 		if (leaf)
 		{
@@ -183,7 +187,7 @@ void octree::add_particle(particle *par)
 	}
 }
 
-double octree::get_mass(void)
+datatype octree::get_mass(void)
 {
 	return this -> mass;
 }
@@ -330,7 +334,7 @@ octree* octree::get_parent(void)
 	return this -> parent;
 }
 
-double octree::get_side(void)
+datatype octree::get_side(void)
 {
 	return this -> side;
 }

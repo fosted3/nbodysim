@@ -29,6 +29,10 @@
 #include <limits>
 #include <random>
 
+#ifndef datatype
+#define datatype float
+#endif
+
 /****************************************\
 | Structs for passing thread information |
 \****************************************/
@@ -40,7 +44,7 @@ struct thread_data //Used for Barnes-Hut thread
 	octree *root;
 	unsigned int start;
 	unsigned int end;
-	double theta;
+	datatype theta;
 	bool damping;
 	bool print;
 	unsigned int num_particles;
@@ -54,8 +58,8 @@ struct file_write_data //Used for writing data (binary, text, and image)
 	unsigned int img_h;
 	unsigned int projection;
 	unsigned int color;
-	double scale;
-	double brightness;
+	datatype scale;
+	datatype brightness;
 	bool binary;
 	bool text;
 	bool image;
@@ -64,7 +68,7 @@ struct file_write_data //Used for writing data (binary, text, and image)
 	bool keep_prev_text;
 	bool adaptive;
 	bool nonlinear;
-	
+
 };
 
 struct update_data //Used for updating particles
@@ -72,7 +76,7 @@ struct update_data //Used for updating particles
 	std::vector<particle*> *particles;
 	unsigned int start;
 	unsigned int end;
-	double dt;
+	datatype dt;
 };
 
 struct generate_data //Used for generating root
@@ -106,21 +110,21 @@ struct settings
 	unsigned int img_w;			//Image width
 	unsigned int img_h;			//Image height
 	unsigned int projection;	//Image projection
-	double size;				//Size of cube if cubic generation specified
-	double theta;				//Theta value for Barnes-Hut calculations
-	double dt;					//Time between frames
+	datatype size;				//Size of cube if cubic generation specified
+	datatype theta;				//Theta value for Barnes-Hut calculations
+	datatype dt;					//Time between frames
 	unsigned long seed;			//User specified seed value
-	double min_mass;			//Minimum particle mass
-	double max_mass;			//Maximum particle mass
-	double min_vel;				//Minimum particle velocity
-	double max_vel;				//Maximum particle velocity
-	double r_sphere;			//Radius of sphere if sphere / shell generation specified
-	double rotation_magnitude;	//Rotation of sphere / shell
-	double scale_x;				//Scale particle x coordinate
-	double scale_y;				//Scale particle y coordinate
-	double scale_z;				//Scale particle z coordinate
-	double brightness;			//How much white to add to location on image if particle lands in pixel
-	double scale;				//Image scale (zoom)
+	datatype min_mass;			//Minimum particle mass
+	datatype max_mass;			//Maximum particle mass
+	datatype min_vel;				//Minimum particle velocity
+	datatype max_vel;				//Maximum particle velocity
+	datatype r_sphere;			//Radius of sphere if sphere / shell generation specified
+	datatype rotation_magnitude;	//Rotation of sphere / shell
+	datatype scale_x;				//Scale particle x coordinate
+	datatype scale_y;				//Scale particle y coordinate
+	datatype scale_z;				//Scale particle z coordinate
+	datatype brightness;			//How much white to add to location on image if particle lands in pixel
+	datatype scale;				//Image scale (zoom)
 	vector rotation_vector;		//Vector of rotation (use in file as rotation_vector x y z)
 	unsigned int gen_type;		//How simulation generates particles (cube, sphere, shell)
 	unsigned int mass_dist;		//How mass is distributed (normal, exp, linear)
@@ -132,26 +136,26 @@ struct settings
 | Utility functions |
 \*******************/
 
-double clamp(double a, double x, double b) //Make x such that a < x < b
+datatype clamp(datatype a, datatype x, datatype b) //Make x such that a < x < b
 {
 	if (x < a) { return a; }
 	if (x > b) { return b; }
 	return x;
 }
 
-double random_double(double low, double high, unsigned int dist, std::default_random_engine &generator) //Random double between low and high with distribution dist
+datatype random_datatype(datatype low, datatype high, unsigned int dist, std::default_random_engine &generator) //Random float between low and high with distribution dist
 {
 	//assert(dist == LINEAR || dist == EXP || dist == NORMAL);
-	double r = -1;
+	datatype r = -1;
 	if (dist == LINEAR)
 	{
-		std::uniform_real_distribution<double> distribution(low, high);
+		std::uniform_real_distribution<datatype> distribution(low, high);
 		r = distribution(generator);
 	}
 	else if (dist == EXP)
 	{
-		double lambda = -1.0 * log(0.001) / (high - low); //Make it such that 99.9% of numbers lie from 0 to (high - low)
-		std::exponential_distribution<double> distribution(lambda);
+		datatype lambda = -1.0 * log(0.001) / (high - low); //Make it such that 99.9% of numbers lie from 0 to (high - low)
+		std::exponential_distribution<datatype> distribution(lambda);
 		do
 		{
 			r = distribution(generator) + low;
@@ -159,9 +163,9 @@ double random_double(double low, double high, unsigned int dist, std::default_ra
 	}
 	else if (dist == NORMAL)
 	{
-		double center = (high + low) / 2.0;
-		double deviation = (high - low) / 6.0; // +/- 3 std. devs
-		std::normal_distribution<double> distribution(center, deviation);
+		datatype center = (high + low) / 2.0;
+		datatype deviation = (high - low) / 6.0; // +/- 3 std. devs
+		std::normal_distribution<datatype> distribution(center, deviation);
 		do
 		{
 			r = distribution(generator);
@@ -175,9 +179,9 @@ double random_double(double low, double high, unsigned int dist, std::default_ra
 	return r;
 }
 
-vector random_vector(double low, double high, std::default_random_engine &generator) //Random vector, used for cubic generation
+vector random_vector(datatype low, datatype high, std::default_random_engine &generator) //Random vector, used for cubic generation
 {
-	vector rv = vector(random_double(low, high, LINEAR, generator), random_double(low, high, LINEAR, generator), random_double(low, high, LINEAR, generator));
+	vector rv = vector(random_datatype(low, high, LINEAR, generator), random_datatype(low, high, LINEAR, generator), random_datatype(low, high, LINEAR, generator));
 	return rv;
 }
 
@@ -185,7 +189,7 @@ void generate_particle(settings &s, std::vector<particle*> &particles, std::defa
 {
 	//assert(s.gen_type == SPHERE || s.gen_type == SHELL || s.gen_type == CUBE);
 	vector null = vector(0, 0, 0); //Used to set acceleration to zero
-	double mass = random_double(s.min_mass, s.max_mass, s.mass_dist, generator);
+	datatype mass = random_datatype(s.min_mass, s.max_mass, s.mass_dist, generator);
 	assert(mass != -1);
 	particle *par = NULL;
 	assert(s.scale_x >= 0);
@@ -197,15 +201,15 @@ void generate_particle(settings &s, std::vector<particle*> &particles, std::defa
 		temp.scale(s.scale_x, s.scale_y, s.scale_z);
 		vector vel = random_vector(-1, 1, generator);
 		vel.normalize();
-		vel *= random_double(s.min_vel, s.max_vel, s.vel_dist, generator);
+		vel *= random_datatype(s.min_vel, s.max_vel, s.vel_dist, generator);
 		par = new particle(&temp, &vel, &null, mass);
 	}
 	else if (s.gen_type == SPHERE || s.gen_type == SHELL)
 	{
-		double radius = -1;
+		datatype radius = -1;
 		if (s.gen_type == SPHERE)
 		{
-			radius = random_double(0, 1, LINEAR, generator);
+			radius = random_datatype(0, 1, LINEAR, generator);
 			radius = cbrt(radius) * s.r_sphere; //volume is proportional to the cube of the radius
 		}
 		else if (s.gen_type == SHELL)
@@ -213,8 +217,8 @@ void generate_particle(settings &s, std::vector<particle*> &particles, std::defa
 			radius = s.r_sphere;
 		}
 		assert(radius != -1);
-		double theta = random_double(0, 6.28318530718, LINEAR, generator);
-		double azimuth = acos(random_double(-1, 1, LINEAR, generator));
+		datatype theta = random_datatype(0, 6.28318530718, LINEAR, generator);
+		datatype azimuth = acos(random_datatype(-1, 1, LINEAR, generator));
 		vector point = vector(radius * sin(azimuth) * cos(theta), radius * sin(azimuth) * sin(theta), radius * cos(azimuth));
 		point.scale(s.scale_x, s.scale_y, s.scale_z);
 		vector rotation = s.rotation_vector;
@@ -266,7 +270,7 @@ vector gravity(particle* par, octree* node, bool damping) //Calculate the force 
 	if (par == node -> get_particle()) { return vector(0, 0, 0); } //Particles exert no force on themselves
 	vector acc = *(node -> get_com()); //This vector is multipurpose
 	acc -= *(par -> get_pos()); //Here it is used as vector fromp particle to node (radius)
-	double r_sq;
+	datatype r_sq;
 	if (!damping)
 	{
 		r_sq = pow(acc.magnitude(), -2); // 1/r^2 no damping
@@ -292,9 +296,9 @@ void *barnes_hut_thread(void *data) //Thread that calculates Barnes-Hut algorith
 	particle* curr;
 	std::vector<particle*> *particles = args -> particles;
 	vector grav_to;
-	double theta = args -> theta;
+	datatype theta = args -> theta;
 	bool damping = args -> damping;
-	double percent;
+	datatype percent;
 	unsigned int completed = 0;
 	for (unsigned int i = (args -> start); i < (args -> end); i++)
 	{
@@ -371,7 +375,7 @@ void barnes_hut_threaded(struct settings &config, std::vector<particle*> &partic
 | Data functions |
 \****************/
 
-void write_image(unsigned int img_w, unsigned int img_h, unsigned int projection, unsigned int color, bool adaptive, bool nonlinear, double scale, double brightness, unsigned int frame, std::vector<particle*> &particles)
+void write_image(unsigned int img_w, unsigned int img_h, unsigned int projection, unsigned int color, bool adaptive, bool nonlinear, datatype scale, datatype brightness, unsigned int frame, std::vector<particle*> &particles)
 {
 	FIBITMAP *image = FreeImage_Allocate(img_w, img_h, 24); //Image allocation, wxh, 24bpp
 	RGBQUAD pixel; //Color variable
@@ -380,7 +384,7 @@ void write_image(unsigned int img_w, unsigned int img_h, unsigned int projection
 		std::cerr << "Can't allocate memory for image. Exiting." << std::endl;
 		exit(1);
 	}
-	std::vector<std::vector<double> > temp(img_w, std::vector<double>(img_h)); //Temporary double array for more precise coloring
+	std::vector<std::vector<datatype> > temp(img_w, std::vector<datatype>(img_h)); //Temporary datatype array for more precise coloring
 	for (unsigned int i = 0; i < img_w; i++)
 	{
 		for (unsigned int j = 0; j < img_h; j++)
@@ -389,10 +393,10 @@ void write_image(unsigned int img_w, unsigned int img_h, unsigned int projection
 		}
 	}
 	assert(projection == FRONT || projection == SIDE || projection == TOP || projection == ISO);
-	double x = 0; //XY position of current particle
-	double y = 0;
+	datatype x = 0; //XY position of current particle
+	datatype y = 0;
 	int v = 0; //Value variable
-	double max = 0;
+	datatype max = 0;
 	if (projection == ISO) { scale *= 2.0; } //Isometric projection shrinks scale by 2, compensate for this
 	for (unsigned int i = 0; i < particles.size(); i++)
 	{
@@ -508,8 +512,8 @@ void *dump(void *data) //Data dumping thread
 	bool image = args -> image;
 	bool adaptive = args -> adaptive;
 	bool nonlinear = args -> nonlinear;
-	double scale = args -> scale;
-	double brightness = args -> brightness;
+	datatype scale = args -> scale;
+	datatype brightness = args -> brightness;
 	std::vector<particle*> *particles = args -> particles;
 	std::string bfilename = gen_filename(frame, true);
 	std::string tfilename = gen_filename(frame, false);
@@ -643,13 +647,13 @@ void *gen_root_thread(void *data) //Thread for generating root
 
 octree* gen_root_threaded(std::vector<particle*> &particles) //Root generation call
 {
-	double min_x = std::numeric_limits<double>::max(); //If your particles go beyond this then you have a problem
-	double min_y = std::numeric_limits<double>::max();
-	double min_z = std::numeric_limits<double>::max();
-	double max_x = std::numeric_limits<double>::lowest(); //lowest is negative max, min is very close to zero
-	double max_y = std::numeric_limits<double>::lowest();
-	double max_z = std::numeric_limits<double>::lowest();
-	double size;
+	datatype min_x = std::numeric_limits<datatype>::max(); //If your particles go beyond this then you have a problem
+	datatype min_y = std::numeric_limits<datatype>::max();
+	datatype min_z = std::numeric_limits<datatype>::max();
+	datatype max_x = std::numeric_limits<datatype>::lowest(); //lowest is negative max, min is very close to zero
+	datatype max_y = std::numeric_limits<datatype>::lowest();
+	datatype max_z = std::numeric_limits<datatype>::lowest();
+	datatype size;
 	vector origin;
 	vector temp;
 	pthread_t threads[8];
@@ -693,13 +697,13 @@ octree* gen_root_threaded(std::vector<particle*> &particles) //Root generation c
 }
 octree* gen_root(std::vector<particle*> &particles)
 {
-	double min_x = std::numeric_limits<double>::max(); //If your particles go beyond this then you have a problem
-	double min_y = std::numeric_limits<double>::max();
-	double min_z = std::numeric_limits<double>::max();
-	double max_x = std::numeric_limits<double>::lowest(); //lowest is negative max, min is very close to zero
-	double max_y = std::numeric_limits<double>::lowest();
-	double max_z = std::numeric_limits<double>::lowest();
-	double size;
+	datatype min_x = std::numeric_limits<datatype>::max(); //If your particles go beyond this then you have a problem
+	datatype min_y = std::numeric_limits<datatype>::max();
+	datatype min_z = std::numeric_limits<datatype>::max();
+	datatype max_x = std::numeric_limits<datatype>::lowest(); //lowest is negative max, min is very close to zero
+	datatype max_y = std::numeric_limits<datatype>::lowest();
+	datatype max_z = std::numeric_limits<datatype>::lowest();
+	datatype size;
 	vector origin;
 	vector temp;
 	for (unsigned int i = 0; i < particles.size(); i++) //Find bounds of particles
@@ -735,7 +739,7 @@ octree* gen_root(std::vector<particle*> &particles)
 
 void update_all(struct settings &config, std::vector<particle*> &particles)
 {
-	double dt = config.dt;
+	datatype dt = config.dt;
 	for (unsigned int i = 0; i < particles.size(); i++) { particles[i] -> update(dt); }
 }
 
@@ -888,9 +892,9 @@ void read_settings(settings &s, const char* sfile) //Read config file
 			}
 			else if (var.compare("rotation_vector") == 0)
 			{
-				double x;
-				double y;
-				double z;
+				datatype x;
+				datatype y;
+				datatype z;
 				cfg >> x;
 				cfg >> y;
 				cfg >> z;

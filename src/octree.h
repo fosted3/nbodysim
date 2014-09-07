@@ -4,27 +4,31 @@
 #include "vector.h"
 #include "particle.h"
 
+#ifndef datatype
+#define datatype float
+#endif
+
 class particle;
 
 class octree
 {
 	public:
 		octree();
-		octree(vector*, double, octree*); //center, side, parent
-		octree(vector*, double);
+		octree(vector*, datatype, octree*); //center, side, parent
+		octree(vector*, datatype);
 		~octree();
 		void add_particle(particle*);
 		void allocate_child(unsigned int);
 		void print_info(void);
 		void print_info(unsigned int);
 		void calc_mass(void);
-		double get_mass(void);
+		datatype get_mass(void);
 		void calc_com(void);
 		vector* get_com(void);
 		bool inside(particle*);
 		void release_particle(void);
 		octree* get_parent(void);
-		double get_side(void);
+		datatype get_side(void);
 		octree* get_child(unsigned int);
 		particle* get_particle(void);
 		void calc_mass_threaded(void);
@@ -34,10 +38,10 @@ class octree
 		octree* parent;
 		vector center;
 		vector com;
-		double side;
+		datatype side;
 		octree *children[8];
 		particle* p;
-		double mass;
+		datatype mass;
 };
 
 void* calc_mass_thread(void*);

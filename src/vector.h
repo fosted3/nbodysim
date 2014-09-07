@@ -1,33 +1,37 @@
 #ifndef vector_h_
 #define vector_h_
 
+#ifndef datatype
+#define datatype float
+#endif
+
 class vector
 {
 	public:
 		vector();
-		vector(double, double, double);
+		vector(datatype, datatype, datatype);
 		~vector();
 		void print(void);
 		void print_inline(void);
 		vector& operator += (const vector&);
 		vector& operator -= (const vector&);
-		vector& operator *= (const double&);
-		vector& operator /= (const double&);
+		vector& operator *= (const datatype&);
+		vector& operator /= (const datatype&);
 		vector& operator = (const vector&);
 		//const double operator[] (const int); //this doesn't seem to work properly (fix), temporarily replaced with get_x, etc.
-		double get_x(void);
-		double get_y(void);
-		double get_z(void);
-		double magnitude(void);
+		datatype get_x(void);
+		datatype get_y(void);
+		datatype get_z(void);
+		datatype magnitude(void);
 		void normalize(void);
-		void scale(double, double, double);
+		void scale(datatype, datatype, datatype);
 	private:
-		double x;
-		double y;
-		double z;
+		datatype x;
+		datatype y;
+		datatype z;
 };
 
-double distance(vector*, vector*);
+datatype distance(vector*, vector*);
 vector cross(vector&, vector&);
 
 #endif
