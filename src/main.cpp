@@ -49,11 +49,10 @@
 
 struct thread_data //Used for Barnes-Hut thread
 {
-	int thread_id;
+	unsigned int thread_id;
 	std::vector<particle*> *particles;
 	octree *root;
-	unsigned int start;
-	unsigned int end;
+	unsigned int modulus;
 	datatype theta;
 	bool damping;
 	bool print;
@@ -328,11 +327,11 @@ void *barnes_hut_thread(void *data) //Thread that calculates Barnes-Hut algorith
 	unsigned int completed = 0;
 	double collide_distance = args -> range;
 	std::unordered_set<std::pair<particle*, particle*> > *collision_data = args -> collision_data;
-	for (unsigned int i = (args -> start); i < (args -> end); i++)
+	for (unsigned int i = (args -> thread_id); i < particles -> size(); i+= args -> modulus)
 	{
-		if (args -> thread_id == 0 && args -> print && i % 100 == 0) //Thread 0 displays its progress because mutex locks
+		if (args -> thread_id == 0 && args -> print && (i - args -> thread_id) / (args -> modulus) % 100 == 0) //Thread 0 displays its progress because mutex locks
 		{
-			completed += 100 * particles -> size() / args -> end;
+			completed += 100 * (args -> modulus);
 			percent = completed * 100;
 			percent /= args ->  num_particles;
 			printf("\b\b\b\b\b\b\b%3.2f%%", percent);
@@ -396,15 +395,7 @@ void barnes_hut_threaded(struct settings &config, std::vector<particle*> &partic
 		td[i].thread_id = i;
 		td[i].particles = &particles;
 		td[i].root = root;
-		td[i].start = (particles.size() / config.threads) * i;
-		if (i == config.threads - 1) //Make sure that every last particle is updated
-		{
-			td[i].end = particles.size();
-		}
-		else
-		{
-			td[i].end = (particles.size() / config.threads) * (i + 1);
-		}
+		td[i].modulus = config.threads;
 		td[i].theta = config.theta;
 		td[i].damping = config.damping;
 		td[i].print = config.display_progress;
