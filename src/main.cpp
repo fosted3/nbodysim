@@ -28,6 +28,9 @@
 #include <FreeImage.h>
 #include <limits>
 #include <random>
+#include <unordered_map>
+#include <unordered_set>
+#include<utility>
 
 #ifdef DOUBLE
 #ifndef datatype
@@ -55,6 +58,8 @@ struct thread_data //Used for Barnes-Hut thread
 	bool damping;
 	bool print;
 	unsigned int num_particles;
+	std::unordered_set<std::pair<particle*, particle*> > *collision_data;
+	datatype range;
 };
 
 struct file_write_data //Used for writing data (binary, text, and image)
@@ -111,6 +116,7 @@ struct settings
 	bool damping;				//Close interaction damping
 	bool adaptive_brightness;	//Adaptive brightness
 	bool nonlinear_brightness;	//Nonlinear brightness
+	bool collide;				//Calculate collisions
 	unsigned int num_particles; //How many particles to generate if no resume present
 	unsigned int num_frames;	//How many frames to compute
 	unsigned int threads;		//How many threads to use for Barnes-Hut calculation
@@ -119,19 +125,20 @@ struct settings
 	unsigned int projection;	//Image projection
 	datatype size;				//Size of cube if cubic generation specified
 	datatype theta;				//Theta value for Barnes-Hut calculations
-	datatype dt;					//Time between frames
+	datatype dt;				//Time between frames
 	unsigned long seed;			//User specified seed value
 	datatype min_mass;			//Minimum particle mass
 	datatype max_mass;			//Maximum particle mass
-	datatype min_vel;				//Minimum particle velocity
-	datatype max_vel;				//Maximum particle velocity
+	datatype min_vel;			//Minimum particle velocity
+	datatype max_vel;			//Maximum particle velocity
 	datatype r_sphere;			//Radius of sphere if sphere / shell generation specified
-	datatype rotation_magnitude;	//Rotation of sphere / shell
-	datatype scale_x;				//Scale particle x coordinate
-	datatype scale_y;				//Scale particle y coordinate
-	datatype scale_z;				//Scale particle z coordinate
-	datatype brightness;			//How much white to add to location on image if particle lands in pixel
+	datatype rotation_magnitude;//Rotation of sphere / shell
+	datatype scale_x;			//Scale particle x coordinate
+	datatype scale_y;			//Scale particle y coordinate
+	datatype scale_z;			//Scale particle z coordinate
+	datatype brightness;		//How much white to add to location on image if particle lands in pixel
 	datatype scale;				//Image scale (zoom)
+	datatype collision_range;	//Distance at which particles collide
 	vector rotation_vector;		//Vector of rotation (use in file as rotation_vector x y z)
 	unsigned int gen_type;		//How simulation generates particles (cube, sphere, shell)
 	unsigned int mass_dist;		//How mass is distributed (normal, exp, linear)
@@ -142,6 +149,18 @@ struct settings
 /*******************\
 | Utility functions |
 \*******************/
+
+namespace std
+{
+	template<> struct hash<std::pair<particle*, particle*> >
+	{
+		size_t operator() (const std::pair<particle*, particle*> &p) const
+		{
+		    return std::hash<int>()(p.first -> get_pos() -> get_x()) ^ std::hash<int>()(p.first -> get_pos() -> get_y()) ^ std::hash<int>()(p.first -> get_pos() -> get_z()) ^ std::hash<int>()(p.second -> get_pos() -> get_x()) ^ std::hash<int>()(p.second -> get_pos() -> get_y()) ^ std::hash<int>()(p.second -> get_pos() -> get_z());
+		}
+	};
+}
+
 
 datatype clamp(datatype a, datatype x, datatype b) //Make x such that a < x < b
 {
@@ -307,6 +326,8 @@ void *barnes_hut_thread(void *data) //Thread that calculates Barnes-Hut algorith
 	bool damping = args -> damping;
 	datatype percent;
 	unsigned int completed = 0;
+	double collide_distance = args -> range;
+	std::unordered_set<std::pair<particle*, particle*> > *collision_data = args -> collision_data;
 	for (unsigned int i = (args -> start); i < (args -> end); i++)
 	{
 		if (args -> thread_id == 0 && args -> print && i % 100 == 0) //Thread 0 displays its progress because mutex locks
@@ -332,18 +353,44 @@ void *barnes_hut_thread(void *data) //Thread that calculates Barnes-Hut algorith
 			}
 			else
 			{
+				if (collision_data != NULL && node -> get_particle() != NULL && distance(node -> get_particle() -> get_pos(), curr -> get_pos()) < collide_distance && node -> get_particle() != curr)
+				{
+					//assert(std::make_pair(node -> get_particle(), curr) == std::make_pair(node -> get_particle(), curr));
+					if (node -> get_particle() -> get_pos() -> get_x() < curr -> get_pos() -> get_x())
+					{
+						//std::cout << "Collision between " << node -> get_particle() << " and " << curr << std::endl;
+						collision_data -> insert(std::make_pair(node -> get_particle(), curr));
+					}
+					else
+					{
+						//std::cout << "Collision between " << curr << " and " << node -> get_particle() << std::endl;
+						collision_data -> insert(std::make_pair(curr, node -> get_particle()));
+					}
+				}
 				grav_to = gravity(curr, node, damping);
 				curr -> set_acc_offset(&grav_to);
 			}
 		}
 	}
+	//std::cout << "Collision size: " << collision_data -> size() << std::endl;
 	pthread_exit(NULL);
 }
 
-void barnes_hut_threaded(struct settings &config, std::vector<particle*> &particles, octree* root)
+particle* collide(particle *a, particle *b)
+{
+	vector pos = weighted_average(a -> get_pos(), b -> get_pos(), a -> get_mass(), b -> get_mass());
+	vector vel = weighted_average(a -> get_vel(), b -> get_vel(), a -> get_mass(), b -> get_mass());
+	vector null = vector(0, 0, 0);
+	datatype mass = a -> get_mass() + b -> get_mass();
+	return new particle(&pos, &vel, &null, mass);
+}
+	
+void barnes_hut_threaded(struct settings &config, std::vector<particle*> &particles, octree *root, std::unordered_set<particle*> *added, std::unordered_set<particle*> *removed)
 {
 	pthread_t *threads = new pthread_t[config.threads];
 	struct thread_data *td = new thread_data[config.threads];
+	std::unordered_set<std::pair<particle*, particle*> > collision_data;
+	std::unordered_map<particle*, particle*> update_table;
 	for (unsigned int i = 0; i < config.threads; i++)
 	{
 		td[i].thread_id = i;
@@ -362,11 +409,56 @@ void barnes_hut_threaded(struct settings &config, std::vector<particle*> &partic
 		td[i].damping = config.damping;
 		td[i].print = config.display_progress;
 		td[i].num_particles = particles.size();
+		td[i].range = config.collision_range;
+		if (added != NULL && removed != NULL) { td[i].collision_data = new std::unordered_set<std::pair<particle*, particle*> >; }
+		else { td[i].collision_data = NULL; }
 		create_thread(&threads[i], NULL, barnes_hut_thread, (void*) &td[i]);
 	}
 	for (unsigned int i = 0; i < config.threads; i++)
 	{
 		pthread_join(threads[i], NULL);
+		if (added != NULL && removed != NULL)
+		{
+			for (std::unordered_set<std::pair<particle*, particle*> >::const_iterator itr = td[i].collision_data -> begin(); itr != td[i].collision_data -> end(); itr++)
+			{
+				collision_data.insert(*itr);
+			}
+			delete td[i].collision_data;
+		}
+		td[i].collision_data = NULL;
+	}
+	if (added != NULL && removed != NULL)
+	{
+		for (std::unordered_set<std::pair<particle*, particle*> >::const_iterator collision_iter = collision_data.begin(); collision_iter != collision_data.end(); collision_iter++)
+		{
+			particle *a = collision_iter -> first;
+			particle *b = collision_iter -> second;
+			std::unordered_map<particle*,particle*>::const_iterator first_find = update_table.find(a);
+			std::unordered_map<particle*,particle*>::const_iterator second_find = update_table.find(b);
+			while (first_find != update_table.end())
+			{
+				//std::cout << a << " points to " << first_find -> second << std::endl;
+				a = first_find -> second;
+				first_find = update_table.find(a);
+			
+			}
+			while (second_find != update_table.end())
+			{
+				//std::cout << b << " points to " << second_find -> second << std::endl;
+				b = second_find -> second;
+				second_find = update_table.find(b);
+			}
+			if (a == b) { continue; }
+			particle* newp = collide(a, b);
+			//std::cout << "Creating " << newp << " from " << a << " and " << b << std::endl;
+			update_table[a] = newp;
+			update_table[b] = newp;
+			added -> erase(a);
+			added -> erase(b);
+			added -> insert(newp);
+			removed -> insert(a);
+			removed -> insert(b);
+		}
 	}
 	if (config.display_progress) //Get rid of that last print statement
 	{
@@ -376,7 +468,36 @@ void barnes_hut_threaded(struct settings &config, std::vector<particle*> &partic
 	delete[] td;
 }
 
-
+void update_collision(std::vector<particle*> &particles, std::unordered_set<particle*> *added, std::unordered_set<particle*> *removed)
+{
+	int count = 0;
+	std::vector<particle*>::iterator particle_itr;
+	std::unordered_set<particle*>::const_iterator removed_find;
+	std::unordered_set<particle*>::iterator added_itr;
+	std::unordered_set<particle*>::iterator removed_itr;
+	for (particle_itr = particles.begin(); particle_itr != particles.end(); particle_itr++)
+	{
+		removed_find = removed -> find(*particle_itr);
+		if (removed_find != removed -> end())
+		{
+			//std::cout << "Removed particle @ " << *particle_itr << std::endl;
+			count--;
+			particles.erase(particle_itr);
+			particle_itr--;
+		}
+	}
+	for (removed_itr = removed -> begin(); removed_itr != removed -> end(); removed_itr++)
+	{
+		delete *removed_itr;
+	}
+	for (added_itr = added -> begin(); added_itr != added -> end(); added_itr++)
+	{
+		//std::cout << "Added particle from " << *added_itr << std::endl;
+		count++;
+		particles.push_back(*added_itr);
+	}
+	//std::cout << "Count changed by " << count << std::endl;
+}
 
 /****************\
 | Data functions |
@@ -430,8 +551,8 @@ void write_image(unsigned int img_w, unsigned int img_h, unsigned int projection
 		x += (x - (img_w / 2)) * (scale - 1); //Scaling
 		y += (y - (img_h / 2)) * (scale - 1);
 		if (x < 0 || y < 0 || x > img_w - 1 || y > img_w - 1) { continue; }
-		//x = clamp(0, x, img_w - 1); //Make sure it's inside the image
-		//y = clamp(0, y, img_h - 1);
+		x = clamp(0, x, img_w - 1); //Make sure it's inside the image
+		y = clamp(0, y, img_h - 1);
 		if (projection == ISO) { y = (img_h - 1) - y; } //I'm not quite sure why but the image flipped upside down in isometric
 		temp[(int) x][(int) y] += brightness; //Store value into array
 		if (temp[(int) x][(int) y] > max) { max = temp[(int) x][(int) y]; }
@@ -897,6 +1018,12 @@ void read_settings(settings &s, const char* sfile) //Read config file
 				if (var.compare("true") == 0) { s.nonlinear_brightness = true; }
 				else { s.nonlinear_brightness = false; }
 			}
+			else if (var.compare("collide") == 0)
+			{
+				cfg >> var;
+				if (var.compare("true") == 0) { s.collide = true; }
+				else { s.collide = false; }
+			}
 			else if (var.compare("rotation_vector") == 0)
 			{
 				datatype x;
@@ -972,6 +1099,7 @@ void read_settings(settings &s, const char* sfile) //Read config file
 			else if (var.compare("img_w") == 0) { cfg >> s.img_w; }
 			else if (var.compare("img_h") == 0) { cfg >> s.img_h; }
 			else if (var.compare("scale") == 0) { cfg >> s.scale; }
+			else if (var.compare("collision_range") == 0) { cfg >> s.collision_range; }
 			else { std::cerr << "Unrecognized variable " << var << std::endl; }
 		}
 	}
@@ -1023,6 +1151,8 @@ void set_default(settings &s) //Set settings to default values
 	s.color = BW;
 	s.adaptive_brightness = false;
 	s.nonlinear_brightness = false;
+	s.collide = false;
+	s.collision_range = 0.01;
 }
 
 int main(int argc, char **argv)
@@ -1058,6 +1188,8 @@ int main(int argc, char **argv)
 	generator.seed(seed);
 	octree* root;
 	std::vector<particle*> particles;
+	std::unordered_set<particle*> *added = NULL;
+	std::unordered_set<particle*> *removed = NULL;
 	pthread_t file_thread;
 	if (config.read_existing) //Read existing data
 	{
@@ -1096,7 +1228,12 @@ int main(int argc, char **argv)
 		if (config.threads > 1) { root -> calc_com_threaded(); }
 		else { root -> calc_com(); }
 		if (config.verbose) { std::cout << "Starting Barnes-Hut algorithm..." << std::endl; }
-		barnes_hut_threaded(config, particles, root);
+		if (config.collide)
+		{
+			added = new std::unordered_set<particle*>;
+			removed = new std::unordered_set<particle*>;
+		}
+		barnes_hut_threaded(config, particles, root, added, removed);
 		if (first) //pthread_join can't be called on uninitialized value file_thread
 		{
 			first = false;
@@ -1105,6 +1242,14 @@ int main(int argc, char **argv)
 		{
 			pthread_join(file_thread, NULL);
 		}
+		if (config.collide)
+		{
+			if (config.verbose) { std::cout << "Calculating collision results..." << std::endl; }
+			update_collision(particles, added, removed);
+			delete added;
+			delete removed;
+		}
+		if (config.verbose) { std::cout << "Number of particles: " << particles.size() << std::endl; }
 		if (config.verbose) { std::cout << "Updating particles..." << std::endl; }
 		if (config.threads > 1) { update_all_threaded(config, particles); }
 		else { update_all(config, particles); }

@@ -40,5 +40,6 @@ class vector
 
 datatype distance(vector*, vector*);
 vector cross(vector&, vector&);
+vector weighted_average(vector*, vector*, datatype, datatype);
 
 #endif

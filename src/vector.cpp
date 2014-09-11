@@ -125,3 +125,8 @@ void vector::scale(datatype scale_x, datatype scale_y, datatype scale_z)
 	this -> y *= scale_y;
 	this -> z *= scale_z;
 }
+
+vector weighted_average(vector *a, vector *b, datatype aw, datatype bw)
+{
+	return vector((a -> get_x() * aw + b -> get_x() * bw) / (aw + bw), (a -> get_y() * aw + b -> get_y() * bw) / (aw + bw), (a -> get_z() * aw + b -> get_z() * bw) / (aw + bw));
+}
