@@ -329,9 +329,9 @@ void *barnes_hut_thread(void *data) //Thread that calculates Barnes-Hut algorith
 	std::unordered_set<std::pair<particle*, particle*> > *collision_data = args -> collision_data;
 	for (unsigned int i = (args -> thread_id); i < particles -> size(); i+= args -> modulus)
 	{
-		if (args -> thread_id == 0 && args -> print && (i - args -> thread_id) / (args -> modulus) % 100 == 0) //Thread 0 displays its progress because mutex locks
+		if (args -> thread_id == 0 && args -> print && (i - args -> thread_id) / (args -> modulus) % 25 == 0) //Thread 0 displays its progress because mutex locks
 		{
-			completed += 100 * (args -> modulus);
+			completed += 25 * (args -> modulus);
 			percent = completed * 100;
 			percent /= args ->  num_particles;
 			printf("\b\b\b\b\b\b\b%3.2f%%", percent);
@@ -418,8 +418,13 @@ void barnes_hut_threaded(struct settings &config, std::vector<particle*> &partic
 		}
 		td[i].collision_data = NULL;
 	}
+	if (config.display_progress) //Get rid of that last print statement
+	{
+		printf("\b\b\b\b\b\b\b");
+	}
 	if (added != NULL && removed != NULL)
 	{
+		if (config.verbose) { std::cout << "Culling collision data..." << std::endl; }
 		for (std::unordered_set<std::pair<particle*, particle*> >::const_iterator collision_iter = collision_data.begin(); collision_iter != collision_data.end(); collision_iter++)
 		{
 			particle *a = collision_iter -> first;
@@ -450,10 +455,6 @@ void barnes_hut_threaded(struct settings &config, std::vector<particle*> &partic
 			removed -> insert(a);
 			removed -> insert(b);
 		}
-	}
-	if (config.display_progress) //Get rid of that last print statement
-	{
-		printf("\b\b\b\b\b\b\b");
 	}
 	delete[] threads; //Memory management
 	delete[] td;
