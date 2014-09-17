@@ -15,7 +15,6 @@
 #include "vector.h"
 #include "particle.h"
 #include "octree.h"
-#include <vector>
 #include <stdlib.h>
 #include <time.h>
 #include <iostream>
@@ -30,7 +29,7 @@
 #include <random>
 #include <unordered_map>
 #include <unordered_set>
-#include<utility>
+#include <utility>
 
 #ifdef DOUBLE
 #ifndef datatype
@@ -43,6 +42,11 @@
 #endif
 #endif
 
+typedef std::pair<particle*, particle*> particle_pair;
+typedef std::unordered_set<particle*> particle_set;
+typedef std::unordered_set<std::pair<particle*, particle*> > particle_pair_set;
+typedef std::unordered_map<particle*, particle*> particle_map;
+
 /****************************************\
 | Structs for passing thread information |
 \****************************************/
@@ -50,20 +54,20 @@
 struct thread_data //Used for Barnes-Hut thread
 {
 	unsigned int thread_id;
-	std::vector<particle*> *particles;
+	particle_set *particles;
 	octree *root;
 	unsigned int modulus;
 	datatype theta;
 	bool damping;
 	bool print;
 	unsigned int num_particles;
-	std::unordered_set<std::pair<particle*, particle*> > *collision_data;
+	particle_pair_set *collision_data;
 	datatype range;
 };
 
 struct file_write_data //Used for writing data (binary, text, and image)
 {
-	std::vector<particle*> *particles;
+	particle_set *particles;
 	unsigned int frame;
 	unsigned int img_w;
 	unsigned int img_h;
@@ -84,7 +88,7 @@ struct file_write_data //Used for writing data (binary, text, and image)
 
 struct update_data //Used for updating particles
 {
-	std::vector<particle*> *particles;
+	particle_set *particles;
 	unsigned int start;
 	unsigned int end;
 	datatype dt;
@@ -93,7 +97,7 @@ struct update_data //Used for updating particles
 struct generate_data //Used for generating root
 {
 	octree *target;
-	std::vector<particle*> *particles;
+	particle_set *particles;
 };
 
 /********************************\
@@ -151,15 +155,23 @@ struct settings
 
 namespace std
 {
-	template<> struct hash<std::pair<particle*, particle*> >
+	template<> struct hash<particle_pair>
 	{
-		size_t operator() (const std::pair<particle*, particle*> &p) const
+		size_t operator() (const particle_pair &p) const
 		{
-		    return std::hash<int>()(p.first -> get_pos() -> get_x()) ^ std::hash<int>()(p.first -> get_pos() -> get_y()) ^ std::hash<int>()(p.first -> get_pos() -> get_z()) ^ std::hash<int>()(p.second -> get_pos() -> get_x()) ^ std::hash<int>()(p.second -> get_pos() -> get_y()) ^ std::hash<int>()(p.second -> get_pos() -> get_z());
+			return std::hash<int>()(p.first -> get_pos() -> get_x()) ^ std::hash<int>()(p.first -> get_pos() -> get_y()) ^ std::hash<int>()(p.first -> get_pos() -> get_z()) ^ std::hash<int>()(p.second -> get_pos() -> get_x()) ^ std::hash<int>()(p.second -> get_pos() -> get_y()) ^ std::hash<int>()(p.second -> get_pos() -> get_z());
 		}
 	};
 }
 
+particle_set::iterator& operator+=(particle_set::iterator &itr, const unsigned int &inc)
+{
+	for (unsigned int x = 0; x < inc; x++)
+	{
+		*itr ++;
+	}
+	return itr;
+}
 
 datatype clamp(datatype a, datatype x, datatype b) //Make x such that a < x < b
 {
@@ -210,7 +222,7 @@ vector random_vector(datatype low, datatype high, std::default_random_engine &ge
 	return rv;
 }
 
-void generate_particle(settings &s, std::vector<particle*> &particles, std::default_random_engine &generator) //Generates a particle with the specified settings
+void generate_particle(settings &s, particle_set *particles, std::default_random_engine &generator) //Generates a particle with the specified settings
 {
 	//assert(s.gen_type == SPHERE || s.gen_type == SHELL || s.gen_type == CUBE);
 	vector null = vector(0, 0, 0); //Used to set acceleration to zero
@@ -258,7 +270,7 @@ void generate_particle(settings &s, std::vector<particle*> &particles, std::defa
 		exit(1);
 	}
 	assert(par != NULL);
-	particles.push_back(par);
+	particles -> insert(par);
 }
 
 bool file_exists(const char *filename) //Check if a file exists
@@ -319,24 +331,28 @@ void *barnes_hut_thread(void *data) //Thread that calculates Barnes-Hut algorith
 	octree* node;
 	octree* root = args -> root;
 	particle* curr;
-	std::vector<particle*> *particles = args -> particles;
+	particle_set *particles = args -> particles;
 	vector grav_to;
 	datatype theta = args -> theta;
 	bool damping = args -> damping;
 	datatype percent;
 	unsigned int completed = 0;
 	double collide_distance = args -> range;
-	std::unordered_set<std::pair<particle*, particle*> > *collision_data = args -> collision_data;
-	for (unsigned int i = (args -> thread_id); i < particles -> size(); i+= args -> modulus)
+	unsigned int pos = args -> thread_id;
+	particle_pair_set *collision_data = args -> collision_data;
+	particle_set::iterator itr = particles -> begin();
+	itr += args -> thread_id;
+	for (; pos < particles -> size(); itr += args -> modulus)
 	{
-		if (args -> thread_id == 0 && args -> print && (i - args -> thread_id) / (args -> modulus) % 25 == 0) //Thread 0 displays its progress because mutex locks
+		std::cout << pos << std::endl;
+		if (args -> thread_id == 0 && args -> print && (pos - args -> thread_id) / (args -> modulus) % 25 == 0) //Thread 0 displays its progress because mutex locks
 		{
 			completed += 25 * (args -> modulus);
 			percent = completed * 100;
 			percent /= args ->  num_particles;
 			printf("\b\b\b\b\b\b\b%3.2f%%", percent);
 		}
-		curr = (*particles)[i];
+		curr = *itr;
 		curr -> set_acc_zero();
 		nodes.push(root);
 		while (!nodes.empty()) //Read wikipedia if you want to know the details of how this works
@@ -370,6 +386,7 @@ void *barnes_hut_thread(void *data) //Thread that calculates Barnes-Hut algorith
 				curr -> set_acc_offset(&grav_to);
 			}
 		}
+		pos += args -> modulus;
 	}
 	//std::cout << "Collision size: " << collision_data -> size() << std::endl;
 	pthread_exit(NULL);
@@ -384,25 +401,25 @@ particle* collide(particle *a, particle *b)
 	return new particle(&pos, &vel, &null, mass);
 }
 	
-void barnes_hut_threaded(struct settings &config, std::vector<particle*> &particles, octree *root, std::unordered_set<particle*> *added, std::unordered_set<particle*> *removed)
+void barnes_hut_threaded(struct settings &config, particle_set *particles, octree *root, particle_set *added, particle_set *removed)
 {
 	pthread_t *threads = new pthread_t[config.threads];
 	struct thread_data *td = new thread_data[config.threads];
-	std::unordered_set<std::pair<particle*, particle*> > collision_data;
-	std::unordered_map<particle*, particle*> update_table;
+	particle_pair_set collision_data;
+	particle_map update_table;
 	unsigned long count;
 	for (unsigned int i = 0; i < config.threads; i++)
 	{
 		td[i].thread_id = i;
-		td[i].particles = &particles;
+		td[i].particles = particles;
 		td[i].root = root;
 		td[i].modulus = config.threads;
 		td[i].theta = config.theta;
 		td[i].damping = config.damping;
 		td[i].print = config.display_progress;
-		td[i].num_particles = particles.size();
+		td[i].num_particles = particles -> size();
 		td[i].range = config.collision_range;
-		if (added != NULL && removed != NULL) { td[i].collision_data = new std::unordered_set<std::pair<particle*, particle*> >; }
+		if (added != NULL && removed != NULL) { td[i].collision_data = new particle_pair_set; }
 		else { td[i].collision_data = NULL; }
 		create_thread(&threads[i], NULL, barnes_hut_thread, (void*) &td[i]);
 	}
@@ -421,7 +438,7 @@ void barnes_hut_threaded(struct settings &config, std::vector<particle*> &partic
 		{
 			if (config.display_progress && config.verbose) { std::cout << "Inserting collision data from thread " << i << std::endl; }
 			count = 0;
-			for (std::unordered_set<std::pair<particle*, particle*> >::const_iterator itr = td[i].collision_data -> begin(); itr != td[i].collision_data -> end(); itr++)
+			for (particle_pair_set::const_iterator itr = td[i].collision_data -> begin(); itr != td[i].collision_data -> end(); itr++)
 			{
 				collision_data.insert(*itr);
 				count++;
@@ -430,17 +447,17 @@ void barnes_hut_threaded(struct settings &config, std::vector<particle*> &partic
 			if (config.display_progress && config.verbose) { printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b"); }
 			delete td[i].collision_data;
 		}
-		td[i].collision_data = NULL;
+		//td[i].collision_data = NULL;
 	}
+	std::cout << "adwad" << std::endl;
 	if (added != NULL && removed != NULL)
 	{
-		if (config.verbose) { std::cout << "Culling collision data..." << std::endl; }
-		for (std::unordered_set<std::pair<particle*, particle*> >::const_iterator collision_iter = collision_data.begin(); collision_iter != collision_data.end(); collision_iter++)
+		for (particle_pair_set::const_iterator collision_iter = collision_data.begin(); collision_iter != collision_data.end(); collision_iter++)
 		{
 			particle *a = collision_iter -> first;
 			particle *b = collision_iter -> second;
-			std::unordered_map<particle*,particle*>::const_iterator first_find = update_table.find(a);
-			std::unordered_map<particle*,particle*>::const_iterator second_find = update_table.find(b);
+			particle_map::const_iterator first_find = update_table.find(a);
+			particle_map::const_iterator second_find = update_table.find(b);
 			while (first_find != update_table.end())
 			{
 				//std::cout << a << " points to " << first_find -> second << std::endl;
@@ -470,14 +487,14 @@ void barnes_hut_threaded(struct settings &config, std::vector<particle*> &partic
 	delete[] td;
 }
 
-void update_collision(std::vector<particle*> &particles, std::unordered_set<particle*> *added, std::unordered_set<particle*> *removed)
+void update_collision(particle_set *particles, particle_set *added, particle_set *removed)
 {
 	unsigned long count = 0;
-	std::vector<particle*>::iterator particle_itr;
-	std::unordered_set<particle*>::const_iterator removed_find;
-	std::unordered_set<particle*>::iterator added_itr;
-	std::unordered_set<particle*>::iterator removed_itr;
-	for (particle_itr = particles.begin(); particle_itr != particles.end(); particle_itr++)
+	particle_set::iterator particle_itr;
+	particle_set::const_iterator particle_find;
+	particle_set::iterator added_itr;
+	particle_set::iterator removed_itr;
+	/*for (particle_itr = particles.begin(); particle_itr != particles.end(); particle_itr++)
 	{
 		removed_find = removed -> find(*particle_itr);
 		if (removed_find != removed -> end())
@@ -493,9 +510,14 @@ void update_collision(std::vector<particle*> &particles, std::unordered_set<part
 		}
 		if (count % 25 == 0) { printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b%lu/%lu", count, particles.size()); }
 	}
-	count = 0;
+	count = 0; */
 	for (removed_itr = removed -> begin(); removed_itr != removed -> end(); removed_itr++)
 	{
+		particle_find = particles -> find(*removed_itr);
+		if (particle_find != particles -> end())
+		{
+			particles -> erase(*removed_itr);
+		}
 		delete *removed_itr;
 		count ++;
 		printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b%lu/%lu", count, removed -> size());
@@ -505,7 +527,7 @@ void update_collision(std::vector<particle*> &particles, std::unordered_set<part
 	{
 		//std::cout << "Added particle from " << *added_itr << std::endl;
 		count++;
-		particles.push_back(*added_itr);
+		particles -> insert(*added_itr);
 		printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b%lu/%lu", count, added -> size());
 	}
 	printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
@@ -516,7 +538,7 @@ void update_collision(std::vector<particle*> &particles, std::unordered_set<part
 | Data functions |
 \****************/
 
-void write_image(unsigned int img_w, unsigned int img_h, unsigned int projection, unsigned int color, bool adaptive, bool nonlinear, datatype scale, datatype brightness, unsigned int frame, std::vector<particle*> &particles)
+void write_image(unsigned int img_w, unsigned int img_h, unsigned int projection, unsigned int color, bool adaptive, bool nonlinear, datatype scale, datatype brightness, unsigned int frame, particle_set *particles)
 {
 	FIBITMAP *image = FreeImage_Allocate(img_w, img_h, 24); //Image allocation, wxh, 24bpp
 	RGBQUAD pixel; //Color variable
@@ -539,27 +561,27 @@ void write_image(unsigned int img_w, unsigned int img_h, unsigned int projection
 	int v = 0; //Value variable
 	datatype max = 0;
 	if (projection == ISO) { scale *= 2.0; } //Isometric projection shrinks scale by 2, compensate for this
-	for (unsigned int i = 0; i < particles.size(); i++)
+	for (particle_set::iterator itr = particles -> begin(); itr != particles -> end(); itr++)
 	{
 		if (projection == FRONT)
 		{
-			x = particles[i] -> get_pos() -> get_x() + (img_w / 2);
-			y = particles[i] -> get_pos() -> get_z() + (img_h / 2);
+			x = (*itr) -> get_pos() -> get_x() + (img_w / 2);
+			y = (*itr) -> get_pos() -> get_z() + (img_h / 2);
 		}
 		else if (projection == SIDE)
 		{
-			x = particles[i] -> get_pos() -> get_y() + (img_w / 2);
-			y = particles[i] -> get_pos() -> get_z() + (img_h / 2);
+			x = (*itr) -> get_pos() -> get_y() + (img_w / 2);
+			y = (*itr) -> get_pos() -> get_z() + (img_h / 2);
 		}
 		else if (projection == TOP)
 		{
-			x = particles[i] -> get_pos() -> get_x() + (img_w / 2);
-			y = particles[i] -> get_pos() -> get_y() + (img_h / 2);
+			x = (*itr) -> get_pos() -> get_x() + (img_w / 2);
+			y = (*itr) -> get_pos() -> get_y() + (img_h / 2);
 		}
 		else
 		{
-			x = ((sqrt(3) / 2.0) * (particles[i] -> get_pos() -> get_x() - particles[i] -> get_pos() -> get_y()) + img_w) / 2.0;
-			y = ((-0.5) * (particles[i] -> get_pos() -> get_x() + particles[i] -> get_pos() -> get_y() + 2 * particles[i] -> get_pos() -> get_z()) + img_h) / 2.0;
+			x = ((sqrt(3) / 2.0) * ((*itr) -> get_pos() -> get_x() - (*itr) -> get_pos() -> get_y()) + img_w) / 2.0;
+			y = ((-0.5) * ((*itr) -> get_pos() -> get_x() + (*itr) -> get_pos() -> get_y() + 2 * (*itr) -> get_pos() -> get_z()) + img_h) / 2.0;
 		}
 		x += (x - (img_w / 2)) * (scale - 1); //Scaling
 		y += (y - (img_h / 2)) * (scale - 1);
@@ -655,7 +677,7 @@ void *dump(void *data) //Data dumping thread
 	bool nonlinear = args -> nonlinear;
 	datatype scale = args -> scale;
 	datatype brightness = args -> brightness;
-	std::vector<particle*> *particles = args -> particles;
+	particle_set *particles = args -> particles;
 	std::string bfilename = gen_filename(frame, true);
 	std::string tfilename = gen_filename(frame, false);
 	std::string ifilename = gen_image(frame);
@@ -689,7 +711,7 @@ void *dump(void *data) //Data dumping thread
 	{
 		std::fstream boutfile(bfilename, std::ios::out | std::ios::binary);
 		boutfile.seekp(0);
-		for (unsigned int i = 0; i < particles -> size(); i++) { boutfile.write((char*)(*particles)[i], size); }
+		for (particle_set::iterator itr = particles -> begin(); itr != particles -> end(); itr++) { boutfile.write((char*)(*itr), size); }
 		boutfile.flush();
 		boutfile.close();
 	}
@@ -698,9 +720,9 @@ void *dump(void *data) //Data dumping thread
 		vector temp;
 		std::fstream toutfile(tfilename, std::ios::out);
 		toutfile.seekp(0);
-		for (unsigned int i = 0; i < particles -> size(); i++)
+		for (particle_set::iterator itr = particles -> begin(); itr != particles -> end(); itr++)
 		{
-			temp = *((*particles)[i] -> get_pos());
+			temp = *((*itr) -> get_pos());
 			toutfile << temp.get_x() << ", " << temp.get_y() << ", " << temp.get_z() << "\n";
 		}
 		toutfile.flush();
@@ -708,15 +730,15 @@ void *dump(void *data) //Data dumping thread
 	}
 	if (image) //Dump image
 	{
-		write_image(img_w, img_h, projection, color, adaptive, nonlinear, scale, brightness, frame, *particles);
+		write_image(img_w, img_h, projection, color, adaptive, nonlinear, scale, brightness, frame, particles);
 	}
 	pthread_exit(NULL);
 }
 
-void dump_threaded(struct settings &config, unsigned int frame, std::vector<particle*> &particles, pthread_t &file_thread) //Data dumping call
+void dump_threaded(struct settings &config, unsigned int frame, particle_set *particles, pthread_t &file_thread) //Data dumping call
 {
 	struct file_write_data fd; //Set up args
-	fd.particles = &particles;
+	fd.particles = particles;
 	fd.frame = frame;
 	fd.binary = config.dump_binary;
 	fd.text = config.dump_text;
@@ -735,9 +757,9 @@ void dump_threaded(struct settings &config, unsigned int frame, std::vector<part
 	create_thread(&file_thread, NULL, dump, (void*) &fd); //No thread joining here, thread is defined in main function and is joined there
 }
 
-unsigned int read_data(std::vector<particle*> &particles, unsigned int num_frames) //Read data back into particles
+unsigned int read_data(particle_set *particles, unsigned int num_frames) //Read data back into particles
 {
-	assert (particles.size() == 0);
+	assert (particles -> size() == 0);
 	unsigned int size = sizeof(particle);
 	int frame = num_frames;
 	unsigned int num_particles;
@@ -753,7 +775,7 @@ unsigned int read_data(std::vector<particle*> &particles, unsigned int num_frame
 	{
 		infile.read((char*) &temp, size);
 		to_add = new particle(temp);
-		particles.push_back(to_add);
+		particles -> insert(to_add);
 	}
 	return frame + 1;
 }
@@ -766,15 +788,15 @@ void *gen_root_thread(void *data) //Thread for generating root
 {
 	struct generate_data *args;
 	args = (struct generate_data*) data;
-	std::vector<particle*> *particles = args -> particles;
+	particle_set *particles = args -> particles;
 	octree *target = args -> target;
 	assert (target != NULL);
 	unsigned int added = 0;
-	for (unsigned int i = 0; i < particles -> size(); i++)
+	for (particle_set::iterator itr = particles -> begin(); itr != particles -> end(); itr++)
 	{
-		if (target -> inside((*particles)[i])) //Make sure the particle is inside the thing you're adding it to
+		if (target -> inside(*itr)) //Make sure the particle is inside the thing you're adding it to
 		{
-			target -> add_particle((*particles)[i]);
+			target -> add_particle(*itr);
 			added ++;
 		}
 	}
@@ -786,7 +808,7 @@ void *gen_root_thread(void *data) //Thread for generating root
 	pthread_exit(NULL);
 }
 
-octree* gen_root_threaded(std::vector<particle*> &particles) //Root generation call
+octree* gen_root_threaded(particle_set *particles) //Root generation call
 {
 	datatype min_x = std::numeric_limits<datatype>::max(); //If your particles go beyond this then you have a problem
 	datatype min_y = std::numeric_limits<datatype>::max();
@@ -799,9 +821,9 @@ octree* gen_root_threaded(std::vector<particle*> &particles) //Root generation c
 	vector temp;
 	pthread_t threads[8];
 	struct generate_data data[8];
-	for (unsigned int i = 0; i < particles.size(); i++) //Find bounds of particles
+	for (particle_set::iterator itr = particles -> begin(); itr != particles -> end(); itr++) //Find bounds of particles
 	{
-		temp = *(particles[i] -> get_pos());
+		temp = *((*itr) -> get_pos());
 		if (temp.get_x() < min_x) { min_x = temp.get_x(); }
 		if (temp.get_x() > max_x) { max_x = temp.get_x(); }
 		if (temp.get_y() < min_y) { min_y = temp.get_y(); }
@@ -827,7 +849,7 @@ octree* gen_root_threaded(std::vector<particle*> &particles) //Root generation c
 	{
 		root -> allocate_child(i);
 		data[i].target = root -> get_child(i);
-		data[i].particles = &particles;
+		data[i].particles = particles;
 		create_thread(&threads[i], NULL, gen_root_thread, (void*) &data[i]);
 	}
 	for (unsigned int i = 0; i < 8; i++) //Wait for completion
@@ -836,7 +858,7 @@ octree* gen_root_threaded(std::vector<particle*> &particles) //Root generation c
 	}
 	return root;
 }
-octree* gen_root(std::vector<particle*> &particles)
+octree* gen_root(particle_set *particles)
 {
 	datatype min_x = std::numeric_limits<datatype>::max(); //If your particles go beyond this then you have a problem
 	datatype min_y = std::numeric_limits<datatype>::max();
@@ -847,9 +869,9 @@ octree* gen_root(std::vector<particle*> &particles)
 	datatype size;
 	vector origin;
 	vector temp;
-	for (unsigned int i = 0; i < particles.size(); i++) //Find bounds of particles
+	for (particle_set::iterator itr = particles -> begin(); itr != particles -> end(); itr++) //Find bounds of particles
 	{
-		temp = *(particles[i] -> get_pos());
+		temp = *((*itr) -> get_pos());
 		if (temp.get_x() < min_x) { min_x = temp.get_x(); }
 		if (temp.get_x() > max_x) { max_x = temp.get_x(); }
 		if (temp.get_y() < min_y) { min_y = temp.get_y(); }
@@ -871,37 +893,42 @@ octree* gen_root(std::vector<particle*> &particles)
 		size = (max_z - min_z) + 2.0;
 	}
 	octree* root = new octree(&origin, size); //Allocate new root
-	for (unsigned int i = 0; i < particles.size(); i++)
+	for (particle_set::iterator itr = particles -> begin(); itr != particles -> end(); itr++)
 	{
-		root -> add_particle(particles[i]);
+		root -> add_particle(*itr);
 	}
 	return root;
 }
 
-void update_all(struct settings &config, std::vector<particle*> &particles)
+void update_all(struct settings &config, particle_set *particles)
 {
 	datatype dt = config.dt;
-	for (unsigned int i = 0; i < particles.size(); i++) { particles[i] -> update(dt); }
+	for (particle_set::iterator itr = particles -> begin(); itr != particles -> end(); itr++) { (*itr) -> update(dt); }
 }
 
 void *update_all_thread(void *data) //Thread for updating particle positions & velocities
 {
 	struct update_data *args;
 	args = (struct update_data*) data;
-	for (unsigned int i = args -> start; i < args -> end; i++) { (*(args -> particles))[i] -> update(args -> dt); }
+	particle_set *particles = args -> particles;
+	particle_set::iterator itr = particles -> begin();
+	itr += args -> start;
+	particle_set::iterator end = particles -> begin();
+	end += args -> end;
+	for (; itr != end; itr++) { (*itr) -> update(args -> dt); }
 	pthread_exit(NULL);
 }
 
-void update_all_threaded(struct settings &config, std::vector<particle*> &particles) //Update call
+void update_all_threaded(struct settings &config, particle_set *particles) //Update call
 {
 	pthread_t *threads = new pthread_t[config.threads]; //Allocate threads & args
 	struct update_data *ud = new update_data[config.threads];
 	for (unsigned int i = 0; i < config.threads; i++) //Distribute work
 	{
-		ud[i].particles = &particles;
-		ud[i].start = (particles.size() / config.threads) * i;
-		if (i == config.threads - 1) { ud[i].end = particles.size(); }
-		else { ud[i].end = (particles.size() / config.threads) * (i + 1); }
+		ud[i].particles = particles;
+		ud[i].start = (particles -> size() / config.threads) * i;
+		if (i == config.threads - 1) { ud[i].end = particles -> size(); }
+		else { ud[i].end = (particles -> size() / config.threads) * (i + 1); }
 		ud[i].dt = config.dt;
 		create_thread(&threads[i], NULL, update_all_thread, (void*) &ud[i]);
 	}
@@ -1200,9 +1227,9 @@ int main(int argc, char **argv)
 	std::default_random_engine generator;
 	generator.seed(seed);
 	octree* root;
-	std::vector<particle*> particles;
-	std::unordered_set<particle*> *added = NULL;
-	std::unordered_set<particle*> *removed = NULL;
+	particle_set *particles = new particle_set;
+	particle_set *added = NULL;
+	particle_set *removed = NULL;
 	pthread_t file_thread;
 	if (config.read_existing) //Read existing data
 	{
@@ -1243,8 +1270,8 @@ int main(int argc, char **argv)
 		if (config.verbose) { std::cout << "Starting Barnes-Hut algorithm..." << std::endl; }
 		if (config.collide)
 		{
-			added = new std::unordered_set<particle*>;
-			removed = new std::unordered_set<particle*>;
+			added = new particle_set;
+			removed = new particle_set;
 		}
 		barnes_hut_threaded(config, particles, root, added, removed);
 		if (first) //pthread_join can't be called on uninitialized value file_thread
@@ -1262,7 +1289,7 @@ int main(int argc, char **argv)
 			delete added;
 			delete removed;
 		}
-		if (config.verbose) { std::cout << "Number of particles: " << particles.size() << std::endl; }
+		if (config.verbose) { std::cout << "Number of particles: " << particles -> size() << std::endl; }
 		if (config.verbose) { std::cout << "Updating particles..." << std::endl; }
 		if (config.threads > 1) { update_all_threaded(config, particles); }
 		else { update_all(config, particles); }
@@ -1283,9 +1310,10 @@ int main(int argc, char **argv)
 		pthread_join(file_thread, NULL);
 	}
 	FreeImage_DeInitialise(); //Deinit freeimage
-	for (unsigned int i = 0; i < particles.size(); i++) //Deallocate particles
+	for (particle_set::iterator itr = particles -> begin(); itr != particles -> end(); itr++) //Deallocate particles
 	{
-		delete particles[i];
+		delete *itr;
 	}
+	delete particles;
 	return 0;
 }
