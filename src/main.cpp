@@ -390,6 +390,7 @@ void barnes_hut_threaded(struct settings &config, std::vector<particle*> &partic
 	struct thread_data *td = new thread_data[config.threads];
 	std::unordered_set<std::pair<particle*, particle*> > collision_data;
 	std::unordered_map<particle*, particle*> update_table;
+	unsigned long count;
 	for (unsigned int i = 0; i < config.threads; i++)
 	{
 		td[i].thread_id = i;
@@ -407,20 +408,29 @@ void barnes_hut_threaded(struct settings &config, std::vector<particle*> &partic
 	}
 	for (unsigned int i = 0; i < config.threads; i++)
 	{
+		if ((config.verbose && i != 0) || (config.verbose && !config.display_progress))
+		{
+			std::cout << "Joining thread " << i << std::endl;
+		}
 		pthread_join(threads[i], NULL);
+		if (config.display_progress && i == 0) //Get rid of that last print statement
+		{
+			printf("\b\b\b\b\b\b\b");
+		}
 		if (added != NULL && removed != NULL)
 		{
+			if (config.display_progress && config.verbose) { std::cout << "Inserting collision data from thread " << i << std::endl; }
+			count = 0;
 			for (std::unordered_set<std::pair<particle*, particle*> >::const_iterator itr = td[i].collision_data -> begin(); itr != td[i].collision_data -> end(); itr++)
 			{
 				collision_data.insert(*itr);
+				count++;
+				if (config.display_progress && config.verbose) { printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b%lu/%lu", count, td[i].collision_data -> size()); }
 			}
+			if (config.display_progress && config.verbose) { printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b"); }
 			delete td[i].collision_data;
 		}
 		td[i].collision_data = NULL;
-	}
-	if (config.display_progress) //Get rid of that last print statement
-	{
-		printf("\b\b\b\b\b\b\b");
 	}
 	if (added != NULL && removed != NULL)
 	{
@@ -462,7 +472,7 @@ void barnes_hut_threaded(struct settings &config, std::vector<particle*> &partic
 
 void update_collision(std::vector<particle*> &particles, std::unordered_set<particle*> *added, std::unordered_set<particle*> *removed)
 {
-	int count = 0;
+	unsigned long count = 0;
 	std::vector<particle*>::iterator particle_itr;
 	std::unordered_set<particle*>::const_iterator removed_find;
 	std::unordered_set<particle*>::iterator added_itr;
@@ -473,21 +483,32 @@ void update_collision(std::vector<particle*> &particles, std::unordered_set<part
 		if (removed_find != removed -> end())
 		{
 			//std::cout << "Removed particle @ " << *particle_itr << std::endl;
-			count--;
+			//count--;
 			particles.erase(particle_itr);
 			particle_itr--;
 		}
+		else
+		{
+			count ++;
+		}
+		if (count % 25 == 0) { printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b%lu/%lu", count, particles.size()); }
 	}
+	count = 0;
 	for (removed_itr = removed -> begin(); removed_itr != removed -> end(); removed_itr++)
 	{
 		delete *removed_itr;
+		count ++;
+		printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b%lu/%lu", count, removed -> size());
 	}
+	count = 0;
 	for (added_itr = added -> begin(); added_itr != added -> end(); added_itr++)
 	{
 		//std::cout << "Added particle from " << *added_itr << std::endl;
 		count++;
 		particles.push_back(*added_itr);
+		printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b%lu/%lu", count, added -> size());
 	}
+	printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
 	//std::cout << "Count changed by " << count << std::endl;
 }
 
