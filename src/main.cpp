@@ -496,21 +496,6 @@ void update_collision(particle_set *particles, particle_set *added, particle_set
 	particle_set::const_iterator particle_find;
 	particle_set::iterator added_itr;
 	particle_set::iterator removed_itr;
-	for (particle_itr = particles.begin(); particle_itr != particles.end(); particle_itr++)
-	{
-		removed_find = removed -> find(*particle_itr);
-		if (removed_find != removed -> end())
-		{
-			particles.erase(particle_itr);
-			particle_itr--;
-		}
-		else
-		{
-			count ++;
-		}
-		if (count % 25 == 0) { printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b%lu/%lu", count, particles.size()); }
-	}
-	count = 0;
 	for (removed_itr = removed -> begin(); removed_itr != removed -> end(); removed_itr++)
 	{
 		particle_find = particles -> find(*removed_itr);
