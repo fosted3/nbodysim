@@ -223,7 +223,7 @@ void octree::calc_mass(void) //call on root *only*
 void *calc_mass_thread(void *obj)
 {
 	octree* target = (octree*) obj;
-	target -> calc_mass();
+	if (target != NULL) { target -> calc_mass(); }
 	pthread_exit(NULL);
 }
 

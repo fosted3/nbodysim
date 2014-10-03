@@ -332,19 +332,18 @@ void *barnes_hut_thread(void *data) //Thread that calculates Barnes-Hut algorith
 	octree* root = args -> root;
 	particle* curr;
 	particle_set *particles = args -> particles;
+	assert(particles != NULL);
 	vector grav_to;
 	datatype theta = args -> theta;
 	bool damping = args -> damping;
 	datatype percent;
 	unsigned int completed = 0;
 	double collide_distance = args -> range;
-	unsigned int pos = args -> thread_id;
 	particle_pair_set *collision_data = args -> collision_data;
 	particle_set::iterator itr = particles -> begin();
 	itr += args -> thread_id;
-	for (; pos < particles -> size(); itr += args -> modulus)
+	for (unsigned int pos = args -> thread_id; pos < particles -> size(); pos += args -> modulus)
 	{
-		std::cout << pos << std::endl;
 		if (args -> thread_id == 0 && args -> print && (pos - args -> thread_id) / (args -> modulus) % 25 == 0) //Thread 0 displays its progress because mutex locks
 		{
 			completed += 25 * (args -> modulus);
@@ -358,6 +357,8 @@ void *barnes_hut_thread(void *data) //Thread that calculates Barnes-Hut algorith
 		while (!nodes.empty()) //Read wikipedia if you want to know the details of how this works
 		{
 			node = nodes.front();
+			assert(node != NULL);
+			assert(curr != NULL);
 			nodes.pop();
 			if (node -> get_side() / distance(node -> get_com(), curr -> get_pos()) > theta && node -> get_particle() == NULL)
 			{
@@ -370,15 +371,12 @@ void *barnes_hut_thread(void *data) //Thread that calculates Barnes-Hut algorith
 			{
 				if (collision_data != NULL && node -> get_particle() != NULL && distance(node -> get_particle() -> get_pos(), curr -> get_pos()) < collide_distance && node -> get_particle() != curr)
 				{
-					//assert(std::make_pair(node -> get_particle(), curr) == std::make_pair(node -> get_particle(), curr));
 					if (node -> get_particle() -> get_pos() -> get_x() < curr -> get_pos() -> get_x())
 					{
-						//std::cout << "Collision between " << node -> get_particle() << " and " << curr << std::endl;
 						collision_data -> insert(std::make_pair(node -> get_particle(), curr));
 					}
 					else
 					{
-						//std::cout << "Collision between " << curr << " and " << node -> get_particle() << std::endl;
 						collision_data -> insert(std::make_pair(curr, node -> get_particle()));
 					}
 				}
@@ -386,9 +384,12 @@ void *barnes_hut_thread(void *data) //Thread that calculates Barnes-Hut algorith
 				curr -> set_acc_offset(&grav_to);
 			}
 		}
-		pos += args -> modulus;
+		for (unsigned int i = 0; i < args -> modulus && itr != particles -> end(); i++)
+		{
+			itr ++;
+		}
+		if (itr == particles -> end()) { break; }
 	}
-	//std::cout << "Collision size: " << collision_data -> size() << std::endl;
 	pthread_exit(NULL);
 }
 
@@ -432,7 +433,7 @@ void barnes_hut_threaded(struct settings &config, particle_set *particles, octre
 		pthread_join(threads[i], NULL);
 		if (config.display_progress && i == 0) //Get rid of that last print statement
 		{
-			printf("\b\b\b\b\b\b\b");
+			printf("\b\b\b\b\b\b\b\b");
 		}
 		if (added != NULL && removed != NULL)
 		{
@@ -440,16 +441,18 @@ void barnes_hut_threaded(struct settings &config, particle_set *particles, octre
 			count = 0;
 			for (particle_pair_set::const_iterator itr = td[i].collision_data -> begin(); itr != td[i].collision_data -> end(); itr++)
 			{
+				assert(&(*itr) != NULL);
 				collision_data.insert(*itr);
-				count++;
 				if (config.display_progress && config.verbose) { printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b%lu/%lu", count, td[i].collision_data -> size()); }
 			}
 			if (config.display_progress && config.verbose) { printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b"); }
-			delete td[i].collision_data;
 		}
-		//td[i].collision_data = NULL;
+		if (config.verbose) { std::cout << "Joined thread " << i << std::endl; }
 	}
-	std::cout << "adwad" << std::endl;
+	for (unsigned int i = 0; i < config.threads; i++)
+	{
+		delete td[i].collision_data;
+	}
 	if (added != NULL && removed != NULL)
 	{
 		for (particle_pair_set::const_iterator collision_iter = collision_data.begin(); collision_iter != collision_data.end(); collision_iter++)
@@ -460,20 +463,19 @@ void barnes_hut_threaded(struct settings &config, particle_set *particles, octre
 			particle_map::const_iterator second_find = update_table.find(b);
 			while (first_find != update_table.end())
 			{
-				//std::cout << a << " points to " << first_find -> second << std::endl;
 				a = first_find -> second;
 				first_find = update_table.find(a);
 			
 			}
 			while (second_find != update_table.end())
 			{
-				//std::cout << b << " points to " << second_find -> second << std::endl;
 				b = second_find -> second;
 				second_find = update_table.find(b);
 			}
 			if (a == b) { continue; }
+			assert(a != NULL);
+			assert(b != NULL);
 			particle* newp = collide(a, b);
-			//std::cout << "Creating " << newp << " from " << a << " and " << b << std::endl;
 			update_table[a] = newp;
 			update_table[b] = newp;
 			added -> erase(a);
@@ -494,13 +496,11 @@ void update_collision(particle_set *particles, particle_set *added, particle_set
 	particle_set::const_iterator particle_find;
 	particle_set::iterator added_itr;
 	particle_set::iterator removed_itr;
-	/*for (particle_itr = particles.begin(); particle_itr != particles.end(); particle_itr++)
+	for (particle_itr = particles.begin(); particle_itr != particles.end(); particle_itr++)
 	{
 		removed_find = removed -> find(*particle_itr);
 		if (removed_find != removed -> end())
 		{
-			//std::cout << "Removed particle @ " << *particle_itr << std::endl;
-			//count--;
 			particles.erase(particle_itr);
 			particle_itr--;
 		}
@@ -510,7 +510,7 @@ void update_collision(particle_set *particles, particle_set *added, particle_set
 		}
 		if (count % 25 == 0) { printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b%lu/%lu", count, particles.size()); }
 	}
-	count = 0; */
+	count = 0;
 	for (removed_itr = removed -> begin(); removed_itr != removed -> end(); removed_itr++)
 	{
 		particle_find = particles -> find(*removed_itr);
@@ -525,13 +525,11 @@ void update_collision(particle_set *particles, particle_set *added, particle_set
 	count = 0;
 	for (added_itr = added -> begin(); added_itr != added -> end(); added_itr++)
 	{
-		//std::cout << "Added particle from " << *added_itr << std::endl;
 		count++;
 		particles -> insert(*added_itr);
 		printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b%lu/%lu", count, added -> size());
 	}
 	printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
-	//std::cout << "Count changed by " << count << std::endl;
 }
 
 /****************\
@@ -796,14 +794,10 @@ void *gen_root_thread(void *data) //Thread for generating root
 	{
 		if (target -> inside(*itr)) //Make sure the particle is inside the thing you're adding it to
 		{
+			std::cout << "Adding particle @ " << *itr << std::endl;
 			target -> add_particle(*itr);
 			added ++;
 		}
-	}
-	if (added == 0) //Empty nodes shouldn't be allocated, though I can't really see a case where this would happen
-	{
-		delete target;
-		target = NULL;
 	}
 	pthread_exit(NULL);
 }
@@ -1255,12 +1249,13 @@ int main(int argc, char **argv)
 	frame = start_frame;
 	std::cout << "Frame " << frame << "/" << config.num_frames << std::endl;
 	assert(config.threads > 0);
-	FreeImage_Initialise(); //Init freeimage
+	if (config.dump_image) { FreeImage_Initialise(); } //Init freeimage
 	while (frame < config.num_frames) //Main loop
 	{
 		if (config.verbose) { std::cout << "Generating root..." << std::endl; }
-		if (config.threads > 1) { root = gen_root_threaded(particles); }
-		else { root = gen_root(particles); }
+		/*if (config.threads > 1) { root = gen_root_threaded(particles); }
+		else { root = gen_root(particles); }*/
+		root = gen_root(particles);
 		if (config.verbose) { std::cout << "Calculating masses of nodes..." << std::endl; }
 		if (config.threads > 1) { root -> calc_mass_threaded(); }
 		else { root -> calc_mass(); }
@@ -1309,7 +1304,7 @@ int main(int argc, char **argv)
 	{
 		pthread_join(file_thread, NULL);
 	}
-	FreeImage_DeInitialise(); //Deinit freeimage
+	if (config.dump_image) { FreeImage_DeInitialise(); } //Deinit freeimage
 	for (particle_set::iterator itr = particles -> begin(); itr != particles -> end(); itr++) //Deallocate particles
 	{
 		delete *itr;
