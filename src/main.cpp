@@ -426,10 +426,6 @@ void barnes_hut_threaded(struct settings &config, particle_set *particles, octre
 	}
 	for (unsigned int i = 0; i < config.threads; i++)
 	{
-		if ((config.verbose && i != 0) || (config.verbose && !config.display_progress))
-		{
-			std::cout << "Joining thread " << i << std::endl;
-		}
 		pthread_join(threads[i], NULL);
 		if (config.display_progress && i == 0) //Get rid of that last print statement
 		{
@@ -437,17 +433,15 @@ void barnes_hut_threaded(struct settings &config, particle_set *particles, octre
 		}
 		if (added != NULL && removed != NULL)
 		{
-			if (config.display_progress && config.verbose) { std::cout << "Inserting collision data from thread " << i << std::endl; }
 			count = 0;
 			for (particle_pair_set::const_iterator itr = td[i].collision_data -> begin(); itr != td[i].collision_data -> end(); itr++)
 			{
 				assert(&(*itr) != NULL);
 				collision_data.insert(*itr);
-				if (config.display_progress && config.verbose) { printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b%lu/%lu", count, td[i].collision_data -> size()); }
+				if (config.display_progress) { printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b%lu/%lu", count, td[i].collision_data -> size()); }
 			}
-			if (config.display_progress && config.verbose) { printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b"); }
+			if (config.display_progress) { printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b"); }
 		}
-		if (config.verbose) { std::cout << "Joined thread " << i << std::endl; }
 	}
 	for (unsigned int i = 0; i < config.threads; i++)
 	{
