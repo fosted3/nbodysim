@@ -439,6 +439,7 @@ void barnes_hut_threaded(struct settings &config, particle_set *particles, octre
 				assert(&(*itr) != NULL);
 				collision_data.insert(*itr);
 				if (config.display_progress) { printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b%lu/%lu", count, td[i].collision_data -> size()); }
+				count++;
 			}
 			if (config.display_progress) { printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b"); }
 		}
