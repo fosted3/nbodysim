@@ -31,4 +31,4 @@ build/thread_functions.o: src/thread_functions.cpp
 	$(CC) $(CFLAGS) src/thread_functions.cpp -o build/thread_functions.o
 
 clean:
-	rm -rf build/*.o bin/nbodysim
+	rm -f build/*.o $(EXECUTABLE)

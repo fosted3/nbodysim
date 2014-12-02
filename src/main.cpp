@@ -434,6 +434,7 @@ void barnes_hut_threaded(struct settings &config, particle_set *particles, octre
 		if (added != NULL && removed != NULL)
 		{
 			count = 0;
+			collision_data.reserve(collision_data.size() + td[i].collision_data -> size());
 			for (particle_pair_set::const_iterator itr = td[i].collision_data -> begin(); itr != td[i].collision_data -> end(); itr++)
 			{
 				assert(&(*itr) != NULL);
@@ -448,8 +449,12 @@ void barnes_hut_threaded(struct settings &config, particle_set *particles, octre
 	{
 		delete td[i].collision_data;
 	}
+	removed -> reserve(collision_data.size() * 2);
+	added -> reserve(collision_data.size());
 	if (added != NULL && removed != NULL)
 	{
+		count = 0;
+		if (config.display_progress) { std::cout << "Culling collision data..." << std::endl; }
 		for (particle_pair_set::const_iterator collision_iter = collision_data.begin(); collision_iter != collision_data.end(); collision_iter++)
 		{
 			particle *a = collision_iter -> first;
@@ -478,19 +483,23 @@ void barnes_hut_threaded(struct settings &config, particle_set *particles, octre
 			added -> insert(newp);
 			removed -> insert(a);
 			removed -> insert(b);
+			count ++;
+			if (config.display_progress) { printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b%lu/%lu", count, collision_data.size()); }
 		}
+		if (config.display_progress) { printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b"); }
 	}
 	delete[] threads; //Memory management
 	delete[] td;
 }
 
-void update_collision(particle_set *particles, particle_set *added, particle_set *removed)
+void update_collision(particle_set *particles, particle_set *added, particle_set *removed, bool display_progress)
 {
 	unsigned long count = 0;
 	particle_set::iterator particle_itr;
 	particle_set::const_iterator particle_find;
 	particle_set::iterator added_itr;
 	particle_set::iterator removed_itr;
+	if (display_progress) { std::cout << "Processing removed..." << std::endl; } 
 	for (removed_itr = removed -> begin(); removed_itr != removed -> end(); removed_itr++)
 	{
 		particle_find = particles -> find(*removed_itr);
@@ -500,16 +509,18 @@ void update_collision(particle_set *particles, particle_set *added, particle_set
 		}
 		delete *removed_itr;
 		count ++;
-		printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b%lu/%lu", count, removed -> size());
+		if (display_progress) { printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b%lu/%lu", count, removed -> size()); }
 	}
 	count = 0;
+	if (display_progress) { std::cout << "Processing added..." << std::endl; }
+	particles -> reserve(particles -> size() + added -> size());
 	for (added_itr = added -> begin(); added_itr != added -> end(); added_itr++)
 	{
 		count++;
 		particles -> insert(*added_itr);
-		printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b%lu/%lu", count, added -> size());
+		if (display_progress) { printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b%lu/%lu", count, added -> size()); }
 	}
-	printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
+	if (display_progress) { printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b"); }
 }
 
 /****************\
@@ -1239,6 +1250,7 @@ int main(int argc, char **argv)
 		if (config.verbose) { std::cout << "Calculating masses of nodes..." << std::endl; }
 		if (config.threads > 1) { root -> calc_mass_threaded(); }
 		else { root -> calc_mass(); }
+		if (config.verbose) { root -> print_info(); }
 		if (config.verbose) { std::cout << "Calculating COMs of nodes..." << std::endl; }
 		if (config.threads > 1) { root -> calc_com_threaded(); }
 		else { root -> calc_com(); }
@@ -1249,6 +1261,9 @@ int main(int argc, char **argv)
 			removed = new particle_set;
 		}
 		barnes_hut_threaded(config, particles, root, added, removed);
+		if (config.verbose) { std::cout << "Deallocating nodes..." << std::endl; }
+		if (config.threads > 1) { delete_root_threaded(root); }
+		else { delete root; }
 		if (first) //pthread_join can't be called on uninitialized value file_thread
 		{
 			first = false;
@@ -1260,7 +1275,7 @@ int main(int argc, char **argv)
 		if (config.collide)
 		{
 			if (config.verbose) { std::cout << "Calculating collision results..." << std::endl; }
-			update_collision(particles, added, removed);
+			update_collision(particles, added, removed, config.display_progress);
 			delete added;
 			delete removed;
 		}
@@ -1268,9 +1283,6 @@ int main(int argc, char **argv)
 		if (config.verbose) { std::cout << "Updating particles..." << std::endl; }
 		if (config.threads > 1) { update_all_threaded(config, particles); }
 		else { update_all(config, particles); }
-		if (config.verbose) { std::cout << "Deallocating nodes..." << std::endl; }
-		if (config.threads > 1) { delete_root_threaded(root); }
-		else { delete root; }
 		if (config.dump_binary || config.dump_text || config.dump_image)
 		{
 			if (config.verbose) { std::cout << "Dumping data..." << std::endl; }
