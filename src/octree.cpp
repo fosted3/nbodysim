@@ -111,7 +111,7 @@ void octree::print_info(void)
 	}
 	else
 	{
-		std::cout << std::endl;
+		std::cout << ", total mass " << this -> mass <<std::endl;
 	}
 }
 

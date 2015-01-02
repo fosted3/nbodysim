@@ -445,14 +445,14 @@ void barnes_hut_threaded(struct settings &config, particle_set *particles, octre
 			if (config.display_progress) { printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b"); }
 		}
 	}
-	for (unsigned int i = 0; i < config.threads; i++)
-	{
-		delete td[i].collision_data;
-	}
-	removed -> reserve(collision_data.size() * 2);
-	added -> reserve(collision_data.size());
 	if (added != NULL && removed != NULL)
 	{
+		for (unsigned int i = 0; i < config.threads; i++)
+		{
+			delete td[i].collision_data;
+		}
+		removed -> reserve(collision_data.size() * 2);
+		added -> reserve(collision_data.size());
 		count = 0;
 		if (config.display_progress) { std::cout << "Culling collision data..." << std::endl; }
 		for (particle_pair_set::const_iterator collision_iter = collision_data.begin(); collision_iter != collision_data.end(); collision_iter++)
