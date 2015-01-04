@@ -785,7 +785,7 @@ void *gen_root_thread(void *data) //Thread for generating root
 	{
 		if (target -> inside(*itr)) //Make sure the particle is inside the thing you're adding it to
 		{
-			std::cout << "Adding particle @ " << *itr << std::endl;
+			//std::cout << "Adding particle @ " << *itr << std::endl;
 			target -> add_particle(*itr);
 			added ++;
 		}
@@ -1125,6 +1125,8 @@ void read_settings(settings &s, const char* sfile) //Read config file
 			else if (var.compare("img_h") == 0) { cfg >> s.img_h; }
 			else if (var.compare("scale") == 0) { cfg >> s.scale; }
 			else if (var.compare("collision_range") == 0) { cfg >> s.collision_range; }
+			else if (var.compare("false") == 0) { continue; }
+			else if (var.compare("true") == 0) { continue; }
 			else { std::cerr << "Unrecognized variable " << var << std::endl; }
 		}
 	}
@@ -1244,9 +1246,9 @@ int main(int argc, char **argv)
 	while (frame < config.num_frames) //Main loop
 	{
 		if (config.verbose) { std::cout << "Generating root..." << std::endl; }
-		/*if (config.threads > 1) { root = gen_root_threaded(particles); }
-		else { root = gen_root(particles); }*/
-		root = gen_root(particles);
+		if (config.threads > 1) { root = gen_root_threaded(particles); }
+		else { root = gen_root(particles); }
+		//root = gen_root(particles);
 		if (config.verbose) { std::cout << "Calculating masses of nodes..." << std::endl; }
 		if (config.threads > 1) { root -> calc_mass_threaded(); }
 		else { root -> calc_mass(); }
