@@ -31,6 +31,10 @@
 #include <unordered_set>
 #include <utility>
 
+#ifdef CUDA
+#include "cuda_helper.h"
+#endif
+
 #ifdef DOUBLE
 #ifndef datatype
 #define datatype double
@@ -337,7 +341,7 @@ void *barnes_hut_thread(void *data) //Thread that calculates Barnes-Hut algorith
 	datatype theta = args -> theta;
 	bool damping = args -> damping;
 	datatype percent;
-	unsigned int completed = 0;
+	unsigned long completed = 0;
 	double collide_distance = args -> range;
 	particle_pair_set *collision_data = args -> collision_data;
 	particle_set::iterator itr = particles -> begin();
@@ -367,7 +371,7 @@ void *barnes_hut_thread(void *data) //Thread that calculates Barnes-Hut algorith
 					if (node -> get_child(i) != NULL) { nodes.push(node -> get_child(i)); }
 				}
 			}
-			else
+			else if (curr != node -> get_particle())
 			{
 				if (collision_data != NULL && node -> get_particle() != NULL && distance(node -> get_particle() -> get_pos(), curr -> get_pos()) < collide_distance && node -> get_particle() != curr)
 				{
@@ -1262,7 +1266,15 @@ int main(int argc, char **argv)
 			added = new particle_set;
 			removed = new particle_set;
 		}
+		#ifdef CUDA
+		if (config.collide || config.damping)
+		{
+			std::cout << "WARNING: collision and damping not yet supported by CUDA implementation" << std::endl;
+		}
+		barnes_hut_cuda(particles, root);
+		#else
 		barnes_hut_threaded(config, particles, root, added, removed);
+		#endif
 		if (config.verbose) { std::cout << "Deallocating nodes..." << std::endl; }
 		if (config.threads > 1) { delete_root_threaded(root); }
 		else { delete root; }
