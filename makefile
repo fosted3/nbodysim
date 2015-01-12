@@ -1,7 +1,7 @@
 CC=g++
 NVCC=nvcc
-CFLAGS=-c -Wall -g -O0 -std=c++11 -Wextra -march=native -mtune=native -DFLOAT
-CUDA_CFLAGS=-c -g -G -O0 -DFLOAT -m64 -arch=compute_30 -code=sm_30 --ptxas-options=-v
+CFLAGS=-c -Wall -g -O3 -std=c++11 -Wextra -march=native -mtune=native -DFLOAT
+CUDA_CFLAGS=-c -g -G -O3 -DFLOAT -m64 -arch=compute_30 -code=sm_30
 LDFLAGS=-lpthread -lfreeimage
 CUDA_LDFLAGS=-lcuda -lcudart
 EXECUTABLE=bin/nbodysim
