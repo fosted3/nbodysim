@@ -30,6 +30,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include "data_structures.h"
 
 #ifdef CUDA
 #include "cuda_helper.h"
@@ -46,10 +47,6 @@
 #endif
 #endif
 
-typedef std::pair<particle*, particle*> particle_pair;
-typedef std::unordered_set<particle*> particle_set;
-typedef std::unordered_set<std::pair<particle*, particle*> > particle_pair_set;
-typedef std::unordered_map<particle*, particle*> particle_map;
 
 /****************************************\
 | Structs for passing thread information |
@@ -166,15 +163,6 @@ namespace std
 			return std::hash<int>()(p.first -> get_pos() -> get_x()) ^ std::hash<int>()(p.first -> get_pos() -> get_y()) ^ std::hash<int>()(p.first -> get_pos() -> get_z()) ^ std::hash<int>()(p.second -> get_pos() -> get_x()) ^ std::hash<int>()(p.second -> get_pos() -> get_y()) ^ std::hash<int>()(p.second -> get_pos() -> get_z());
 		}
 	};
-}
-
-particle_set::iterator& operator+=(particle_set::iterator &itr, const unsigned int &inc)
-{
-	for (unsigned int x = 0; x < inc; x++)
-	{
-		*itr ++;
-	}
-	return itr;
 }
 
 datatype clamp(datatype a, datatype x, datatype b) //Make x such that a < x < b

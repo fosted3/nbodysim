@@ -1,8 +1,10 @@
 #ifndef cuda_types_h_
 #define cuda_types_h_
 
-#define cuda_mem 2147319808
-#define shared_size 1024
+#define cache_size 1000000
+#define shared_size 512
+#define compute_threads 16
+#define block_size 32
 
 #ifdef DOUBLE
 #ifndef datatype3
