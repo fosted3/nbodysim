@@ -11,9 +11,9 @@ CUDA_INCLUDES=-I/opt/cuda/include
 
 all: $(EXECUTABLE)
 
-$(EXECUTABLE): build/main.o build/particle.o build/octree.o build/vector.o build/thread_functions.o build/temp.o
+$(EXECUTABLE): build/main.o build/particle.o build/octree.o build/vector.o build/thread_functions.o
 	mkdir -p $(DIRS)
-	$(CC) build/main.o build/particle.o build/octree.o build/vector.o build/thread_functions.o build/temp.o -o $(EXECUTABLE) $(LDFLAGS)
+	$(CC) build/main.o build/particle.o build/octree.o build/vector.o build/thread_functions.o -o $(EXECUTABLE) $(LDFLAGS)
 
 build/main.o: src/main.cpp
 	mkdir -p $(DIRS)
@@ -35,19 +35,15 @@ build/thread_functions.o: src/thread_functions.cpp
 	mkdir -p $(DIRS)
 	$(CC) $(CFLAGS) src/thread_functions.cpp -o build/thread_functions.o
 
-build/temp.o: src/temp.cpp
-	mkdir -p $(DIRS)
-	$(CC) $(CFLAGS) src/temp.cpp -o build/temp.o
-
 clean:
 	rm -f build/*.o $(EXECUTABLE) $(CUDA_EXE)
 
 cuda: $(CUDA_EXE)
 
-$(CUDA_EXE): build/particle.o build/octree.o build/vector.o build/thread_functions.o build/cuda_code.o build/cuda_helper.o build/temp.o
+$(CUDA_EXE): build/particle.o build/octree.o build/vector.o build/thread_functions.o build/cuda_code.o build/cuda_helper.o
 	mkdir -p $(DIRS)
 	$(CC) $(CFLAGS) -DCUDA src/main.cpp -o build/main.o
-	$(NVCC) build/cuda_code.o build/cuda_helper.o build/main.o build/vector.o build/particle.o build/octree.o build/thread_functions.o build/temp.o -o $(CUDA_EXE) $(CUDA_LDFLAGS) $(LDFLAGS)
+	$(NVCC) build/cuda_code.o build/cuda_helper.o build/main.o build/vector.o build/particle.o build/octree.o build/thread_functions.o -o $(CUDA_EXE) $(CUDA_LDFLAGS) $(LDFLAGS)
 
 build/cuda_code.o: src/cuda_code.cu
 	mkdir -p $(DIRS)
@@ -56,3 +52,10 @@ build/cuda_code.o: src/cuda_code.cu
 build/cuda_helper.o: src/cuda_helper.cpp
 	mkdir -p $(DIRS)
 	$(NVCC) $(CUDA_CFLAGS) -std=c++11 src/cuda_helper.cpp -o build/cuda_helper.o $(CUDA_INCLUDES)
+
+test: build/cuda_test.o build/vector.o build/octree.o build/particle.o build/cuda_helper.o build/thread_functions.o build/cuda_code.o
+	$(NVCC) build/cuda_test.o build/vector.o build/octree.o build/particle.o build/cuda_helper.o build/thread_functions.o build/cuda_code.o -o bin/cuda_test $(CUDA_LDFLAG) $(LDFLAGS)
+
+build/cuda_test.o: src/cuda_test.cpp
+	mkdir -p $(DIRS)
+	$(CC) $(CFLAGS) src/cuda_test.cpp -o build/cuda_test.o
