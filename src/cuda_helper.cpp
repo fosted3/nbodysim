@@ -249,8 +249,8 @@ void barnes_hut_cuda(particle_set *particles, octree *root)
 	}
 	delete[] threads;
 	delete[] td;
-	delete[] streams;
 	free_streams(streams);
+	delete[] streams;
 	free_cache(cache_addr);
 	call_dev_reset();
 }
