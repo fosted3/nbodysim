@@ -1,9 +1,6 @@
 #include "cuda.h"
 #include <vector>
 #include "vector_types.h"
-#include <thrust/device_vector.h>
-#include <thrust/host_vector.h>
-#include <thrust/copy.h>
 #include <cassert>
 #include "cuda_types.h"
 #include <iostream>
@@ -144,8 +141,14 @@ void free_results(datatype3 *addr)
 
 void run_compute(cparticle *par, cparticle *par_addr, cnode *cache, cudaStream_t *stream, datatype3 *results, datatype3 *res_addr, uint16_t size)
 {
+	//std::cout << "Running compute on " << 
 	handle_error(cudaMemcpyAsync(par_addr, par, sizeof(cparticle) * size, cudaMemcpyHostToDevice, *stream));
 	compute<<<size, shared_size, 0, *stream>>>(par_addr, cache, res_addr);
-	//cudaStreamSynchronize(*stream);
+	cudaStreamSynchronize(*stream);
 	handle_error(cudaMemcpyAsync(results, res_addr, sizeof(datatype3) * size, cudaMemcpyDeviceToHost, *stream));
+}
+
+void call_dev_reset(void)
+{
+	cudaDeviceReset();
 }

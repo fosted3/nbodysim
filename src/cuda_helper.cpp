@@ -82,11 +82,13 @@ void *barnes_hut_cuda_thread(void *data)
 	octree *node;
 	particle **par = new particle*[block_size];
 	std::queue<octree*> nodes;
-	nodes.push(root);
 	active_map::iterator active_itr;
 	stale_map::iterator stale_itr;
 	particle_set::iterator particle_itr = particles -> begin();
-	particle_itr += args -> thread_id;
+	for (unsigned int i = 0; i < args -> thread_id && particle_itr != particles -> end(); i++)
+	{
+		particle_itr ++;
+	}
 	datatype3 *results = new datatype3[block_size];
 	uint32_t gpu_index;
 	uint16_t dependancy_index;
@@ -113,7 +115,9 @@ void *barnes_hut_cuda_thread(void *data)
 		temp_cparticles[in_queue].pos.x = par[in_queue] -> get_pos() -> get_x();
 		temp_cparticles[in_queue].pos.y = par[in_queue] -> get_pos() -> get_y();
 		temp_cparticles[in_queue].pos.z = par[in_queue] -> get_pos() -> get_z();
+		temp_cparticles[in_queue].size = 0;
 		dependancy_index = 0;
+		nodes.push(root);
 		while (!nodes.empty())
 		{
 			node = nodes.front();
@@ -176,10 +180,6 @@ void *barnes_hut_cuda_thread(void *data)
 			}
 		}
 		in_queue++;
-		if (in_queue == block_size)
-		{
-			//dependancy calculation is done - call kernel (this should copy memory back to host)
-		}
 		for (unsigned int i = 0; i < args -> modulus && particle_itr != particles -> end(); i++)
 		{
 			particle_itr ++;
@@ -187,11 +187,19 @@ void *barnes_hut_cuda_thread(void *data)
 		if (particle_itr == particles -> end() || in_queue == block_size)
 		{
 			run_compute(temp_cparticles, args -> par_addr, args -> cache_addr, stream, results, args -> res_addr, in_queue);
+			//while(!(args -> lock -> try_lock()));
+			//std::cout << "Ran compute on:" << std::endl;
 			for (uint16_t i = 0; i < in_queue; i++)
 			{
+				//std::cout << "(" << temp_cparticles[i].pos.x << ", " << temp_cparticles[i].pos.y << ", " << temp_cparticles[i].pos.z << "), size " << temp_cparticles[i].size << std::endl;
+				//for (unsigned int j = 0; j < temp_cparticles[i].size; j++)
+				//{
+				//	std::cout << j << ": " << temp_cparticles[i].dependants[j] << std::endl;
+				//}
 				temp_vec = vector(results[i].x, results[i].y, results[i].z);
 				par[i] -> set_acc_offset(&temp_vec);
 			}
+			//args -> lock -> unlock();
 			in_queue = 0;
 		}
 		if (particle_itr == particles -> end()) { break; }
@@ -199,7 +207,9 @@ void *barnes_hut_cuda_thread(void *data)
 	delete[] par;
 	delete[] results;
 	delete[] temp_cparticles;
-	std::cout << "Thread " << args -> thread_id << " exiting." << std::endl;
+	//while (!(args -> lock -> try_lock()));
+	//std::cout << "Thread " << args -> thread_id << " exiting." << std::endl;
+	//args -> lock -> unlock();
 	pthread_exit(NULL);
 }
 
@@ -242,4 +252,5 @@ void barnes_hut_cuda(particle_set *particles, octree *root)
 	delete[] streams;
 	free_streams(streams);
 	free_cache(cache_addr);
+	call_dev_reset();
 }

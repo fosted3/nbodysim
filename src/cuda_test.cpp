@@ -16,13 +16,13 @@ int main()
 	vector temp_pos;
 	vector null_vec = vector(0, 0, 0);
 	octree* root = new octree(&null_vec, 4);
-	for (int x = -1; x < 2; x += 1)
+	for (float x = -1.5; x < 2; x += 1)
 	{
-		for (int y = -1; y < 2; y += 1)
+		for (float y = -1.5; y < 2; y += 1)
 		{
-			for (int z = -1; z < 2; z += 1)
+			for (float z = -1.5; z < 2; z += 1)
 			{
-				if ((x | y | z) == 0) { continue; }
+				//if ((x | y | z) == 0) { continue; }
 				temp_pos = vector(x, y, z);
 				temp_par = new particle(&temp_pos, &null_vec, &null_vec, 1e10);
 				particles -> insert(temp_par);
@@ -35,7 +35,7 @@ int main()
 	}
 	root -> calc_mass();
 	root -> calc_com();
-	root -> print_info(0);
+	//root -> print_info(0);
 	barnes_hut_cuda(particles, root);
 	root -> print_info(0);
 	delete root;

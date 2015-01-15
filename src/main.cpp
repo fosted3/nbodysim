@@ -333,7 +333,10 @@ void *barnes_hut_thread(void *data) //Thread that calculates Barnes-Hut algorith
 	double collide_distance = args -> range;
 	particle_pair_set *collision_data = args -> collision_data;
 	particle_set::iterator itr = particles -> begin();
-	itr += args -> thread_id;
+	for (unsigned int i = 0; i < args -> thread_id && itr != particles -> end(); i++)
+	{
+		itr ++;
+	}
 	for (unsigned int pos = args -> thread_id; pos < particles -> size(); pos += args -> modulus)
 	{
 		if (args -> thread_id == 0 && args -> print && (pos - args -> thread_id) / (args -> modulus) % 25 == 0) //Thread 0 displays its progress because mutex locks
@@ -889,9 +892,15 @@ void *update_all_thread(void *data) //Thread for updating particle positions & v
 	args = (struct update_data*) data;
 	particle_set *particles = args -> particles;
 	particle_set::iterator itr = particles -> begin();
-	itr += args -> start;
+	for (unsigned int i = 0; i < args -> start && itr != particles -> end(); i++)
+	{
+		itr ++;
+	}
 	particle_set::iterator end = particles -> begin();
-	end += args -> end;
+	for (unsigned int i = 0; i < args -> end && end != particles -> end(); i++)
+	{
+		end ++;
+	}
 	for (; itr != end; itr++) { (*itr) -> update(args -> dt); }
 	pthread_exit(NULL);
 }

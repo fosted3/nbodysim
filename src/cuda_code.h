@@ -13,5 +13,6 @@ cparticle* allocate_particles(void);
 datatype3* allocate_results(void);
 void free_particles(cparticle*);
 void free_results(datatype3*);
+void call_dev_reset(void);
 
 #endif
