@@ -1,10 +1,12 @@
 #ifndef cuda_types_h_
 #define cuda_types_h_
 
-#define cache_size 1000000
-#define shared_size 512
-#define compute_threads 16
-#define block_size 32
+#include <stdint.h>
+#include "cuda.h"
+
+#define shared_size 256
+#define compute_threads 8
+#define block_size 4096
 
 #ifdef DOUBLE
 #ifndef datatype3

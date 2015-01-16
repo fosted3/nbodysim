@@ -82,28 +82,11 @@ __global__ void compute(cparticle *particle, cnode *nodes, datatype3 *results)
 	results[bid] = acc[0];
 }
 
-void copy_to_gpu(cnode *cache_addr, uint32_t loc, cnode *data)
-{	
-	handle_error(cudaMemcpy(&cache_addr[loc], data, sizeof(cnode), cudaMemcpyHostToDevice));
-}
-
-cnode* init_cache(void)
-{
-	cnode *addr = NULL;
-	handle_error(cudaMalloc(&addr, cache_size * sizeof(cnode)));
-	return addr;
-}
-
-void free_cache(cnode *addr)
-{
-	handle_error(cudaFree(addr));
-}
-
-/*void init_streams(cudaStream_t *streams)
+void init_streams(cudaStream_t *streams)
 {
 	for(unsigned int i = 0; i < compute_threads; i++)
 	{
-		std::cout << "Initializing stream " << i << std::endl;
+		//std::cout << "Initializing stream " << i << std::endl;
 		handle_error(cudaStreamCreate(&streams[i]));
 	}
 }
@@ -112,15 +95,22 @@ void free_streams(cudaStream_t *streams)
 {
 	for (unsigned int i = 0; i < compute_threads; i++)
 	{
-		std::cout << "Destroying stream " << i << std::endl;
+		//std::cout << "Destroying stream " << i << std::endl;
 		handle_error(cudaStreamDestroy(streams[i]));
 	}
-}*/
+}
 
 cparticle* allocate_particles(void)
 {
 	cparticle *addr = NULL;
 	handle_error(cudaMalloc(&addr, sizeof(cparticle) * block_size));
+	return addr;
+}
+
+cnode* allocate_nodes(void)
+{
+	cnode *addr = NULL;
+	handle_error(cudaMalloc(&addr, sizeof(cnode) * block_size * shared_size));
 	return addr;
 }
 
@@ -136,18 +126,23 @@ void free_particles(cparticle *addr)
 	handle_error(cudaFree(addr));
 }
 
+void free_nodes(cnode *addr)
+{
+	handle_error(cudaFree(addr));
+}
+
 void free_results(datatype3 *addr)
 {
 	handle_error(cudaFree(addr));
 }
 
-void run_compute(cparticle *par, cparticle *par_addr, cnode *cache, datatype3 *results, datatype3 *res_addr, uint16_t size)
+void run_compute(cparticle *particles, cparticle *par_addr, cnode *node, cnode *node_addr, datatype3 *results, datatype3 *res_addr, uint32_t par_size, uint32_t node_size, uint16_t threads, cudaStream_t *stream)
 {
-	//std::cout << "Running compute on " << 
-	handle_error(cudaMemcpy(par_addr, par, sizeof(cparticle) * size, cudaMemcpyHostToDevice));
-	compute<<<size, shared_size>>>(par_addr, cache, res_addr);
-	handle_error(cudaMemcpy(results, res_addr, sizeof(datatype3) * size, cudaMemcpyDeviceToHost));
-	handle_error(cudaDeviceSynchronize());
+	handle_error(cudaMemcpyAsync(par_addr, particles, sizeof(cparticle) * par_size, cudaMemcpyHostToDevice, *stream));
+	handle_error(cudaMemcpyAsync(node_addr, node, sizeof(cnode) * node_size, cudaMemcpyHostToDevice, *stream));
+	compute<<<par_size, threads, 0, *stream>>>(par_addr, node_addr, res_addr);
+	handle_error(cudaMemcpyAsync(results, res_addr, sizeof(datatype3) * par_size, cudaMemcpyDeviceToHost, *stream));
+	handle_error(cudaStreamSynchronize(*stream));
 }
 
 void call_dev_reset(void)
