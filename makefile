@@ -51,7 +51,7 @@ build/cuda_code.o: src/cuda_code.cu
 
 build/cuda_helper.o: src/cuda_helper.cpp
 	mkdir -p $(DIRS)
-	$(NVCC) $(CUDA_CFLAGS) -std=c++11 src/cuda_helper.cpp -o build/cuda_helper.o $(CUDA_INCLUDES)
+	$(CC) $(CFLAGS) src/cuda_helper.cpp -o build/cuda_helper.o $(CUDA_INCLUDES)
 
 test: build/cuda_test.o build/vector.o build/octree.o build/particle.o build/cuda_helper.o build/thread_functions.o build/cuda_code.o
 	$(NVCC) build/cuda_test.o build/vector.o build/octree.o build/particle.o build/cuda_helper.o build/thread_functions.o build/cuda_code.o -o bin/cuda_test $(CUDA_LDFLAG) $(LDFLAGS)
