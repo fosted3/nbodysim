@@ -70,6 +70,8 @@ void *barnes_hut_cuda_thread(void *data)
 	datatype percent;
 	uint64_t completed = 0;
 	uint16_t thread_count = 0;
+	bool is_cont = false;
+	std::queue<octree*> cont_nodes;
 	for (unsigned int pos = args -> thread_id; pos < particles -> size(); pos += compute_threads)
 	{
 		dependancy_index = 0;
@@ -81,13 +83,26 @@ void *barnes_hut_cuda_thread(void *data)
 			percent /= args ->  particles -> size();
 			printf("\b\b\b\b\b\b\b%3.2f%%", percent);
 		}
+		assert(par_loc < block_size);
 		pars[par_loc] = *particle_itr;
 		pars[par_loc] -> set_acc_zero();
 		host_par[par_loc].pos.x = pars[par_loc] -> get_pos() -> get_x();
 		host_par[par_loc].pos.y = pars[par_loc] -> get_pos() -> get_y();
 		host_par[par_loc].pos.z = pars[par_loc] -> get_pos() -> get_z();
 		host_par[par_loc].size = 0;
-		nodes.push(root);
+		if (is_cont)
+		{
+			while(!cont_nodes.empty())
+			{
+				nodes.push(cont_nodes.front());
+				cont_nodes.pop();
+			}
+			is_cont = false;
+		}
+		else
+		{
+			nodes.push(root);
+		}
 		while (!nodes.empty())
 		{
 			node = nodes.front();
@@ -102,10 +117,13 @@ void *barnes_hut_cuda_thread(void *data)
 			}
 			else if ((*particle_itr) != node -> get_particle()) //put node in host_cnodes
 			{
+				assert(num_nodes < shared_size * block_size);
+				assert(par_loc < block_size);
 				host_cnodes[num_nodes].pos.x = node -> get_com() -> get_x();
 				host_cnodes[num_nodes].pos.y = node -> get_com() -> get_y();
 				host_cnodes[num_nodes].pos.z = node -> get_com() -> get_z();
 				host_cnodes[num_nodes].mass = node -> get_mass();
+				assert(dependancy_index < shared_size);
 				host_par[par_loc].dependants[dependancy_index] = num_nodes;
 				dependancy_index++;
 				//assert(dependancy_index < shared_size);
@@ -114,22 +132,43 @@ void *barnes_hut_cuda_thread(void *data)
 				{
 					//std::cout << "Shared overflow, generating new unit" << std::endl;
 					par_loc++;
-					assert(par_loc < block_size);
-					pars[par_loc] = *particle_itr;
-					host_par[par_loc].pos.x = host_par[par_loc - 1].pos.x;
-					host_par[par_loc].pos.y = host_par[par_loc - 1].pos.y;
-					host_par[par_loc].pos.z = host_par[par_loc - 1].pos.z;
-					host_par[par_loc].size = 0;
-					dependancy_index = 0;
+					//assert(par_loc < block_size);
+					if (par_loc == block_size && !nodes.empty())
+					{
+						while(!nodes.empty())
+						{
+							cont_nodes.push(nodes.front());
+							nodes.pop();
+						}
+						is_cont = true;
+					}
+					else if (par_loc == block_size)
+					{
+						par_loc --;
+					}
+					else
+					{
+						assert(par_loc < block_size);
+						assert(par_loc > 0);
+						pars[par_loc] = *particle_itr;
+						host_par[par_loc].pos.x = host_par[par_loc - 1].pos.x;
+						host_par[par_loc].pos.y = host_par[par_loc - 1].pos.y;
+						host_par[par_loc].pos.z = host_par[par_loc - 1].pos.z;
+						host_par[par_loc].size = 0;
+						dependancy_index = 0;
+					}
 				}
 				num_nodes++;
 			}
 		}
 		if (dependancy_index > thread_count) { thread_count = dependancy_index; }
-		par_loc++;
-		for (unsigned int i = 0; i < args -> modulus && particle_itr != particles -> end(); i++)
+		if (!is_cont)
 		{
-			particle_itr ++;
+			par_loc++;
+			for (unsigned int i = 0; i < args -> modulus && particle_itr != particles -> end(); i++)
+			{
+				particle_itr ++;
+			}
 		}
 		if (par_loc == block_size || particle_itr == particles -> end())
 		{
@@ -189,5 +228,5 @@ void barnes_hut_cuda(particle_set *particles, octree *root)
 	delete[] td;
 	free_streams(streams);
 	delete[] streams;
-	//call_dev_reset();
+	call_dev_reset();
 }

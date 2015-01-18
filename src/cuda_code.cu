@@ -87,7 +87,7 @@ void init_streams(cudaStream_t *streams)
 	for(unsigned int i = 0; i < compute_threads; i++)
 	{
 		//std::cout << "Initializing stream " << i << std::endl;
-		handle_error(cudaStreamCreate(&streams[i]));
+		handle_error(cudaStreamCreate(&(streams[i])));
 	}
 }
 
