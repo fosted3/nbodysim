@@ -23,6 +23,7 @@ class particle
 		datatype get_mass(void);
 		vector* get_pos(void);
 		vector* get_vel(void);
+		vector* get_acc(void);
 		void set_acc_zero(void);
 		void set_acc_offset(vector*);
 		void update(datatype);

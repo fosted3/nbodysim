@@ -47,6 +47,11 @@ vector* particle::get_vel(void)
 	return &(this -> velocity);
 }
 
+vector* particle::get_acc(void)
+{
+	return &(this -> acceleration);
+}
+
 void particle::set_acc_zero(void)
 {
 	vector temp = vector(0, 0, 0);

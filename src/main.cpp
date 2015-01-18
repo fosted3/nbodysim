@@ -312,6 +312,14 @@ vector gravity(particle* par, octree* node, bool damping) //Calculate the force 
 	acc *= node -> get_mass(); //Don't need particle mass, f=ma=GmM/r^2 cancels this out
 	acc *= 6.67384e-11; //Newton's gravitational constant
 	acc *= r_sq;
+	/*if (acc.get_x() != acc.get_x() || acc.get_y() != acc.get_y() || acc.get_z() != acc.get_z())
+	{
+		par -> print();
+		node -> print_info();
+		node -> get_com() -> print();
+		acc.print();
+		exit(1);
+	}*/
 	return acc;
 }
 
@@ -379,6 +387,19 @@ void *barnes_hut_thread(void *data) //Thread that calculates Barnes-Hut algorith
 				curr -> set_acc_offset(&grav_to);
 			}
 		}
+		/*if (curr -> get_acc() -> get_x() != curr -> get_acc() -> get_x() || curr -> get_acc() -> get_y() != curr -> get_acc() -> get_y() || curr -> get_acc() -> get_z() != curr -> get_acc() -> get_z())
+		{
+			root -> print_info();
+			for (unsigned int i = 0; i < 8; i++)
+			{
+				if (root -> get_child(i) != NULL)
+				{
+					std::cout << i << " ";
+					root -> get_child(i) -> print_info();
+				}
+			}
+			exit(1);
+		}*/
 		for (unsigned int i = 0; i < args -> modulus && itr != particles -> end(); i++)
 		{
 			itr ++;
@@ -573,6 +594,11 @@ void write_image(unsigned int img_w, unsigned int img_h, unsigned int projection
 		x = clamp(0, x, img_w - 1); //Make sure it's inside the image
 		y = clamp(0, y, img_h - 1);
 		if (projection == ISO) { y = (img_h - 1) - y; } //I'm not quite sure why but the image flipped upside down in isometric
+		/*if (x != x || y != y)
+		{
+			(*itr) -> print();
+			exit(1);
+		}*/
 		temp[(int) x][(int) y] += brightness; //Store value into array
 		if (temp[(int) x][(int) y] > max) { max = temp[(int) x][(int) y]; }
 	}

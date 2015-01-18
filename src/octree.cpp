@@ -251,13 +251,17 @@ void octree::calc_mass_threaded(void) //call on root *only*
 
 void octree::calc_com(void) //call on root *only*
 {
+	vector temp = vector(0, 0, 0);
 	if (this -> p != NULL)
 	{
 		this -> com = *(this -> p -> get_pos());
 	}
+	else if (this -> mass == 0)
+	{
+		this -> com = temp;
+	}
 	else
 	{
-		vector temp = vector(0, 0, 0);
 		for (int i = 0; i < 8; i++)
 		{
 			if (this -> children[i] != NULL)
@@ -271,7 +275,6 @@ void octree::calc_com(void) //call on root *only*
 		temp /= this -> mass;
 		this -> com = temp;
 	}
-	//this -> com.print();
 }
 
 void *calc_com_thread(void *obj)
