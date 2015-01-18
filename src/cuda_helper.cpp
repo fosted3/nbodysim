@@ -39,6 +39,7 @@ struct cuda_thread_data
 	octree *root;
 	unsigned int thread_id;
 	unsigned int modulus;
+	bool damping;
 };
 
 void *barnes_hut_cuda_thread(void *data)
@@ -51,6 +52,7 @@ void *barnes_hut_cuda_thread(void *data)
 	datatype theta = 1.0f;
 	octree *node;
 	std::queue<octree*> nodes;
+	bool damping = args -> damping;
 	particle_set::iterator particle_itr = particles -> begin();
 	for (unsigned int i = 0; i < args -> thread_id && particle_itr != particles -> end(); i++)
 	{
@@ -177,7 +179,7 @@ void *barnes_hut_cuda_thread(void *data)
 				thread_count += 32 - (thread_count % 32);
 			}
 			if (shared_size > 16) { assert(thread_count % 32 == 0); }
-			run_compute(host_par, par_addr, host_cnodes, node_addr, host_res, res_addr, par_loc, num_nodes, thread_count, stream);
+			run_compute(host_par, par_addr, host_cnodes, node_addr, host_res, res_addr, par_loc, num_nodes, thread_count, damping, stream);
 			//std::cout << par_loc << " " << num_nodes << std::endl;
 			for (unsigned int i = 0; i < par_loc; i++)
 			{
@@ -204,7 +206,7 @@ void *barnes_hut_cuda_thread(void *data)
 	pthread_exit(NULL);
 }
 
-void barnes_hut_cuda(particle_set *particles, octree *root)
+void barnes_hut_cuda(particle_set *particles, octree *root, bool damping)
 {
 	pthread_t *threads = new pthread_t[compute_threads];
 	struct cuda_thread_data *td = new cuda_thread_data[compute_threads];
@@ -218,12 +220,14 @@ void barnes_hut_cuda(particle_set *particles, octree *root)
 		td[i].root = root;
 		td[i].thread_id = i;
 		td[i].modulus = compute_threads;
+		td[i].damping = damping;
 		create_thread(&threads[i], NULL, barnes_hut_cuda_thread, (void*) &td[i]);
 	}
 	for (unsigned int i = 0; i < compute_threads; i++)
 	{
 		pthread_join(threads[i], NULL);
 	}
+	printf("\b\b\b\b\b\b\b\b");
 	delete[] threads;
 	delete[] td;
 	free_streams(streams);

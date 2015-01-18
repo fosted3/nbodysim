@@ -82,6 +82,42 @@ __global__ void compute(cparticle *particle, cnode *nodes, datatype3 *results)
 	results[bid] = acc[0];
 }
 
+__global__ void compute_damping(cparticle *particle, cnode *nodes, datatype3 *results)
+{
+	uint16_t tid = threadIdx.x;
+	uint16_t bid = blockIdx.x;
+	__shared__ datatype3 acc[shared_size];
+	__shared__ cnode dep[shared_size];
+	__shared__ cparticle par;
+	__shared__ datatype r_sq[shared_size];
+	if (tid == 0) { par = particle[bid]; }
+	__syncthreads();
+	if (tid < par.size)
+	{
+		dep[tid] = nodes[par.dependants[tid]];
+		acc[tid].x = dep[tid].pos.x - par.pos.x;
+		acc[tid].y = dep[tid].pos.y - par.pos.y;
+		acc[tid].z = dep[tid].pos.z - par.pos.z;
+		r_sq[tid] = length(acc[tid]);
+		r_sq[tid] = 1.0 / (r_sq[tid] * r_sq[tid] + exp(-r_sq[tid]));
+		r_sq[tid] *= 6.67384e-11f * dep[tid].mass / length(acc[tid]);
+		mul_datatype3(acc[tid], r_sq[tid]);
+	}
+	__syncthreads();
+	for (uint16_t s = 1; s < shared_size; s *= 2)
+	{
+		if (tid % (2 * s) == 0 && tid + s < par.size)
+		{
+			acc[tid].x = acc[tid].x + acc[tid + s].x;
+			acc[tid].y = acc[tid].y + acc[tid + s].y;
+			acc[tid].z = acc[tid].z + acc[tid + s].z;
+		}
+		__syncthreads();
+	}
+	results[bid] = acc[0];
+}
+
+
 void init_streams(cudaStream_t *streams)
 {
 	for(unsigned int i = 0; i < compute_threads; i++)
@@ -136,11 +172,18 @@ void free_results(datatype3 *addr)
 	handle_error(cudaFree(addr));
 }
 
-void run_compute(cparticle *particles, cparticle *par_addr, cnode *node, cnode *node_addr, datatype3 *results, datatype3 *res_addr, uint32_t par_size, uint32_t node_size, uint16_t threads, cudaStream_t *stream)
+void run_compute(cparticle *particles, cparticle *par_addr, cnode *node, cnode *node_addr, datatype3 *results, datatype3 *res_addr, uint32_t par_size, uint32_t node_size, uint16_t threads, bool damping, cudaStream_t *stream)
 {
 	handle_error(cudaMemcpyAsync(par_addr, particles, sizeof(cparticle) * par_size, cudaMemcpyHostToDevice, *stream));
 	handle_error(cudaMemcpyAsync(node_addr, node, sizeof(cnode) * node_size, cudaMemcpyHostToDevice, *stream));
-	compute<<<par_size, threads, 0, *stream>>>(par_addr, node_addr, res_addr);
+	if (damping)
+	{
+		compute_damping<<<par_size, threads, 0, *stream>>>(par_addr, node_addr, res_addr);
+	}
+	else
+	{
+		compute<<<par_size, threads, 0, *stream>>>(par_addr, node_addr, res_addr);
+	}
 	handle_error(cudaMemcpyAsync(results, res_addr, sizeof(datatype3) * par_size, cudaMemcpyDeviceToHost, *stream));
 	handle_error(cudaStreamSynchronize(*stream));
 }

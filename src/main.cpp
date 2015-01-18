@@ -1279,7 +1279,7 @@ int main(int argc, char **argv)
 		if (config.verbose) { std::cout << "Calculating masses of nodes..." << std::endl; }
 		if (config.threads > 1) { root -> calc_mass_threaded(); }
 		else { root -> calc_mass(); }
-		if (config.verbose) { root -> print_info(); }
+		//if (config.verbose) { root -> print_info(); }
 		if (config.verbose) { std::cout << "Calculating COMs of nodes..." << std::endl; }
 		if (config.threads > 1) { root -> calc_com_threaded(); }
 		else { root -> calc_com(); }
@@ -1290,11 +1290,11 @@ int main(int argc, char **argv)
 			removed = new particle_set;
 		}
 		#ifdef CUDA
-		if (config.collide || config.damping)
+		if (config.collide)
 		{
-			std::cout << "WARNING: collision and damping not yet supported by CUDA implementation" << std::endl;
+			std::cout << "WARNING: collision not yet supported by CUDA implementation" << std::endl;
 		}
-		barnes_hut_cuda(particles, root);
+		barnes_hut_cuda(particles, root, config.damping);
 		#else
 		barnes_hut_threaded(config, particles, root, added, removed);
 		#endif
