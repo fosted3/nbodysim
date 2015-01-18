@@ -172,11 +172,11 @@ void *barnes_hut_cuda_thread(void *data)
 		}
 		if (par_loc == block_size || particle_itr == particles -> end())
 		{
-			if (thread_count % 32)
+			if (thread_count % 32 && shared_size > 16)
 			{
 				thread_count += 32 - (thread_count % 32);
 			}
-			assert(thread_count % 32 == 0);
+			if (shared_size > 16) { assert(thread_count % 32 == 0); }
 			run_compute(host_par, par_addr, host_cnodes, node_addr, host_res, res_addr, par_loc, num_nodes, thread_count, stream);
 			//std::cout << par_loc << " " << num_nodes << std::endl;
 			for (unsigned int i = 0; i < par_loc; i++)

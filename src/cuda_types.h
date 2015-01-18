@@ -4,9 +4,10 @@
 #include <stdint.h>
 #include "cuda.h"
 
-#define shared_size 256
+
 #define compute_threads 8
-#define block_size 4096
+#define block_size 512
+#define shared_size 32
 
 #ifdef DOUBLE
 #ifndef datatype3
