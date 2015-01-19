@@ -1294,7 +1294,7 @@ int main(int argc, char **argv)
 		{
 			std::cout << "WARNING: collision not yet supported by CUDA implementation" << std::endl;
 		}
-		barnes_hut_cuda(particles, root, config.damping);
+		barnes_hut_cuda(particles, root, config.damping, config.theta);
 		#else
 		barnes_hut_threaded(config, particles, root, added, removed);
 		#endif

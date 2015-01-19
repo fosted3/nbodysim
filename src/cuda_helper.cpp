@@ -39,6 +39,7 @@ struct cuda_thread_data
 	octree *root;
 	unsigned int thread_id;
 	unsigned int modulus;
+	datatype theta;
 	bool damping;
 };
 
@@ -49,7 +50,7 @@ void *barnes_hut_cuda_thread(void *data)
 	cudaStream_t *stream = args -> stream;
 	particle_set *particles = args -> particles;
 	octree *root = args -> root;
-	datatype theta = 1.0f;
+	datatype theta = args -> theta;
 	octree *node;
 	std::queue<octree*> nodes;
 	bool damping = args -> damping;
@@ -59,12 +60,12 @@ void *barnes_hut_cuda_thread(void *data)
 		particle_itr ++;
 	}
 	uint16_t dependancy_index;
-	cparticle *host_par = new cparticle[block_size];
-	cparticle *par_addr = allocate_particles();
-	cnode *host_cnodes = new cnode[shared_size * block_size];
-	cnode *node_addr = allocate_nodes();
-	datatype3 *host_res = new datatype3[block_size];
-	datatype3 *res_addr = allocate_results();
+	cparticle *host_par = allocate_host_particles();
+	cparticle *dev_par = allocate_dev_particles();
+	cnode *host_nodes = allocate_host_nodes();
+	cnode *dev_nodes = allocate_dev_nodes();
+	datatype3 *host_res = allocate_host_results();
+	datatype3 *dev_res = allocate_dev_results();
 	particle **pars = new particle*[block_size];
 	uint32_t num_nodes = 0;
 	uint16_t par_loc = 0;
@@ -121,10 +122,10 @@ void *barnes_hut_cuda_thread(void *data)
 			{
 				assert(num_nodes < shared_size * block_size);
 				assert(par_loc < block_size);
-				host_cnodes[num_nodes].pos.x = node -> get_com() -> get_x();
-				host_cnodes[num_nodes].pos.y = node -> get_com() -> get_y();
-				host_cnodes[num_nodes].pos.z = node -> get_com() -> get_z();
-				host_cnodes[num_nodes].mass = node -> get_mass();
+				host_nodes[num_nodes].pos.x = node -> get_com() -> get_x();
+				host_nodes[num_nodes].pos.y = node -> get_com() -> get_y();
+				host_nodes[num_nodes].pos.z = node -> get_com() -> get_z();
+				host_nodes[num_nodes].mass = node -> get_mass();
 				assert(dependancy_index < shared_size);
 				host_par[par_loc].dependants[dependancy_index] = num_nodes;
 				dependancy_index++;
@@ -179,7 +180,7 @@ void *barnes_hut_cuda_thread(void *data)
 				thread_count += 32 - (thread_count % 32);
 			}
 			if (shared_size > 16) { assert(thread_count % 32 == 0); }
-			run_compute(host_par, par_addr, host_cnodes, node_addr, host_res, res_addr, par_loc, num_nodes, thread_count, damping, stream);
+			run_compute(host_par, dev_par, host_nodes, dev_nodes, host_res, dev_res, par_loc, num_nodes, thread_count, damping, stream);
 			//std::cout << par_loc << " " << num_nodes << std::endl;
 			for (unsigned int i = 0; i < par_loc; i++)
 			{
@@ -196,17 +197,17 @@ void *barnes_hut_cuda_thread(void *data)
 		}
 	}
 	//std::cout << "Thread " << args -> thread_id << " exiting." << std::endl;
-	delete[] host_par;
-	delete[] host_cnodes;
-	delete[] host_res;
+	free_host_particles(host_par);
+	free_host_nodes(host_nodes);
+	free_host_results(host_res);
 	delete[] pars;
-	free_particles(par_addr);
-	free_nodes(node_addr);
-	free_results(res_addr);
+	free_dev_particles(dev_par);
+	free_dev_nodes(dev_nodes);
+	free_dev_results(dev_res);
 	pthread_exit(NULL);
 }
 
-void barnes_hut_cuda(particle_set *particles, octree *root, bool damping)
+void barnes_hut_cuda(particle_set *particles, octree *root, bool damping, datatype theta)
 {
 	pthread_t *threads = new pthread_t[compute_threads];
 	struct cuda_thread_data *td = new cuda_thread_data[compute_threads];
@@ -221,6 +222,7 @@ void barnes_hut_cuda(particle_set *particles, octree *root, bool damping)
 		td[i].thread_id = i;
 		td[i].modulus = compute_threads;
 		td[i].damping = damping;
+		td[i].theta = theta;
 		create_thread(&threads[i], NULL, barnes_hut_cuda_thread, (void*) &td[i]);
 	}
 	for (unsigned int i = 0; i < compute_threads; i++)
@@ -232,5 +234,5 @@ void barnes_hut_cuda(particle_set *particles, octree *root, bool damping)
 	delete[] td;
 	free_streams(streams);
 	delete[] streams;
-	call_dev_reset();
+	//call_dev_reset();
 }

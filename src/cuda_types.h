@@ -6,8 +6,8 @@
 
 
 #define compute_threads 8
-#define block_size 512
-#define shared_size 32
+#define block_size 1024
+#define shared_size 64
 
 #ifdef DOUBLE
 #ifndef datatype3

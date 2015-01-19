@@ -117,7 +117,6 @@ __global__ void compute_damping(cparticle *particle, cnode *nodes, datatype3 *re
 	results[bid] = acc[0];
 }
 
-
 void init_streams(cudaStream_t *streams)
 {
 	for(unsigned int i = 0; i < compute_threads; i++)
@@ -136,40 +135,76 @@ void free_streams(cudaStream_t *streams)
 	}
 }
 
-cparticle* allocate_particles(void)
+cparticle* allocate_dev_particles(void)
 {
 	cparticle *addr = NULL;
 	handle_error(cudaMalloc(&addr, sizeof(cparticle) * block_size));
 	return addr;
 }
 
-cnode* allocate_nodes(void)
+cparticle* allocate_host_particles(void)
+{
+	cparticle *addr = NULL;
+	handle_error(cudaMallocHost(&addr, sizeof(cparticle) * block_size));
+	return addr;
+}
+
+cnode* allocate_dev_nodes(void)
 {
 	cnode *addr = NULL;
 	handle_error(cudaMalloc(&addr, sizeof(cnode) * block_size * shared_size));
 	return addr;
 }
 
-datatype3* allocate_results(void)
+cnode* allocate_host_nodes(void)
+{
+	cnode *addr = NULL;
+	handle_error(cudaMallocHost(&addr, sizeof(cnode) * block_size * shared_size));
+	return addr;
+}
+
+datatype3* allocate_dev_results(void)
 {
 	datatype3 *addr = NULL;
 	handle_error(cudaMalloc(&addr, sizeof(datatype3) * block_size));
 	return addr;
 }
 
-void free_particles(cparticle *addr)
+datatype3* allocate_host_results(void)
+{
+	datatype3 *addr = NULL;
+	handle_error(cudaMallocHost(&addr, sizeof(datatype3) * block_size));
+	return addr;
+}
+
+void free_dev_particles(cparticle *addr)
 {
 	handle_error(cudaFree(addr));
 }
 
-void free_nodes(cnode *addr)
+void free_host_particles(cparticle *addr)
+{
+	handle_error(cudaFreeHost(addr));
+}
+
+void free_dev_nodes(cnode *addr)
 {
 	handle_error(cudaFree(addr));
 }
 
-void free_results(datatype3 *addr)
+void free_host_nodes(cnode *addr)
+{
+	handle_error(cudaFreeHost(addr));
+}
+
+void free_dev_results(datatype3 *addr)
 {
 	handle_error(cudaFree(addr));
+}
+
+void free_host_results(datatype3 *addr)
+{
+	handle_error(cudaFreeHost(addr));
 }
 
 void run_compute(cparticle *particles, cparticle *par_addr, cnode *node, cnode *node_addr, datatype3 *results, datatype3 *res_addr, uint32_t par_size, uint32_t node_size, uint16_t threads, bool damping, cudaStream_t *stream)
