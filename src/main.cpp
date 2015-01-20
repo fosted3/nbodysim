@@ -32,6 +32,7 @@
 #include <utility>
 #include "data_structures.h"
 #include <malloc.h>
+#include <mutex>
 
 #ifdef CUDA
 #include "cuda_helper.h"
@@ -102,6 +103,14 @@ struct generate_data //Used for generating root
 	particle_set *particles;
 };
 
+struct min_size_data
+{
+	octree *target;
+	datatype min_size;
+	particle_set *particles;
+	std::mutex *lock;
+};
+
 /********************************\
 | Struct for all config settings |
 \********************************/
@@ -149,6 +158,7 @@ struct settings
 	unsigned int mass_dist;		//How mass is distributed (normal, exp, linear)
 	unsigned int vel_dist;		//How velocity is distrubuted in cubic mode (normal, exp, linear)
 	unsigned int color;			//Color mapping
+	datatype min_node_size;
 };
 
 /*******************\
@@ -953,7 +963,7 @@ void update_all_threaded(struct settings &config, particle_set *particles) //Upd
 	delete[] ud;
 }
 
-void *delete_root_thread(void* obj) //Thread for deleting root
+void *delete_root_thread(void *obj) //Thread for deleting root
 {
 	octree* target = (octree*) obj;
 	delete target;
@@ -977,6 +987,120 @@ void delete_root_threaded(octree *root) //Delete root call
 		root -> release_child(i);
 	}
 	delete root;
+}
+
+void apply_minimum_size(datatype min_size, octree* node, particle_set *particles, std::mutex *lock)
+{
+	unsigned int particles_contained = 0;
+	bool has_particle[8] = {false, false, false, false, false, false, false, false};
+	for (unsigned int i = 0; i < 8; i++)
+	{
+		if (node -> get_child(i) != NULL)
+		{
+			apply_minimum_size(min_size, node -> get_child(i), particles, lock);
+			if (node -> get_child(i) -> get_particle() != NULL && node -> get_side() < min_size)
+			{
+				particles_contained ++;
+				has_particle[i] = true;
+			}
+		}
+	}
+	if (particles_contained > 0)
+	{
+		particle* new_par = NULL;
+		unsigned int prev = 8;
+		particle_set::iterator itr;
+		for (unsigned int i = 0; i < 8; i++)
+		{
+			if (has_particle[i])
+			{
+				if (new_par == NULL)
+				{
+					new_par = node -> get_child(i) -> get_particle();
+					if (particles_contained == 1)
+					{
+						node -> get_child(i) -> release_particle();
+						delete (node -> get_child(i));
+						node -> release_child(i);
+						node -> add_particle(new_par);
+					}
+				}
+				else
+				{
+					assert(prev != 8);
+					assert(node -> get_child(i) -> get_particle() != NULL);
+					new_par = collide(new_par, node -> get_child(i) -> get_particle());
+					if (lock != NULL) { while (!(lock -> try_lock())); }
+					itr = particles -> find(node -> get_child(prev) -> get_particle());
+					assert(itr != particles -> end());
+					particles -> erase(itr);
+					if (lock != NULL) { lock -> unlock(); }
+					delete (node -> get_child(prev));
+					node -> get_child(prev) -> release_particle();
+					node -> release_child(prev);
+					if (particles_contained == 1)
+					{
+						if (lock != NULL) { while (!(lock -> try_lock())); }
+						itr = particles -> find(node -> get_child(i) -> get_particle());
+						assert(itr != particles -> end());
+						particles -> erase(itr);
+						if (lock != NULL) { lock -> unlock(); }
+						delete (node -> get_child(i));
+						node -> get_child(i) -> release_particle();
+						node -> release_child(i);
+						for (unsigned int j = 0; j < 8; j++)
+						{
+							assert(node -> get_child(j) == NULL);
+						}
+						assert(node -> get_particle() == NULL);
+						node -> add_particle(new_par);
+						if (lock != NULL) { while (!(lock -> try_lock())); }
+						particles -> insert(new_par);
+						if (lock != NULL) { lock -> unlock(); }
+					}
+				}
+				prev = i;
+				particles_contained--;
+			}
+		}
+		assert(particles_contained == 0);
+	}
+}
+
+void *apply_minimum_size_thread(void *data)
+{
+	struct min_size_data *args;
+	args = (struct min_size_data*) data;
+	octree *target = args -> target;
+	datatype min_size = args -> min_size;
+	particle_set *particles = args -> particles;
+	std::mutex *lock = args -> lock;
+	apply_minimum_size(min_size, target, particles, lock);
+	pthread_exit(NULL);
+}
+
+void apply_minimum_size_threaded(datatype min_size, octree* root, particle_set *particles)
+{
+	pthread_t *threads = new pthread_t[8];
+	struct min_size_data *msd = new min_size_data[8];
+	std::mutex lock;
+	for (unsigned int i = 0; i < 8; i++)
+	{
+		if (root -> get_child(i) != NULL)
+		{
+			msd[i].target = root -> get_child(i);
+			msd[i].min_size = min_size;
+			msd[i].particles = particles;
+			msd[i].lock = &lock;
+			create_thread(&threads[i], NULL, apply_minimum_size_thread, (void*) &msd[i]);
+		}
+	}
+	for (unsigned int i = 0; i < 8; i++) //Wait for completion
+	{
+		if (root -> get_child(i) != NULL) { pthread_join(threads[i], NULL); }
+	}
+	delete[] threads; //Memory management
+	delete[] msd;
 }
 
 /********************\
@@ -1153,6 +1277,7 @@ void read_settings(settings &s, const char* sfile) //Read config file
 			else if (var.compare("img_h") == 0) { cfg >> s.img_h; }
 			else if (var.compare("scale") == 0) { cfg >> s.scale; }
 			else if (var.compare("collision_range") == 0) { cfg >> s.collision_range; }
+			else if (var.compare("min_node_size") == 0) { cfg >> s.min_node_size; }
 			else if (var.compare("false") == 0) { continue; }
 			else if (var.compare("true") == 0) { continue; }
 			else { std::cerr << "Unrecognized variable " << var << std::endl; }
@@ -1208,6 +1333,7 @@ void set_default(settings &s) //Set settings to default values
 	s.nonlinear_brightness = false;
 	s.collide = false;
 	s.collision_range = 0.01;
+	s.min_node_size = 0.0;
 }
 
 int main(int argc, char **argv)
@@ -1276,6 +1402,12 @@ int main(int argc, char **argv)
 		if (config.verbose) { std::cout << "Generating root..." << std::endl; }
 		if (config.threads > 1) { root = gen_root_threaded(particles); }
 		else { root = gen_root(particles); }
+		if (config.min_node_size > 0.0 && config.verbose)
+		{
+			std::cout << "Applying minimum size..." << std::endl;
+			if (config.threads > 1) { apply_minimum_size_threaded(config.min_node_size, root, particles); }
+			else { apply_minimum_size(config.min_node_size, root, particles, NULL); }
+		}
 		//root = gen_root(particles);
 		if (config.verbose) { std::cout << "Calculating masses of nodes..." << std::endl; }
 		if (config.threads > 1) { root -> calc_mass_threaded(); }
