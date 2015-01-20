@@ -61,10 +61,13 @@ void *barnes_hut_cuda_thread(void *data)
 	}
 	uint16_t dependancy_index;
 	cparticle *host_par = allocate_host_particles();
+	//cparticle *host_par = new cparticle[block_size];
 	cparticle *dev_par = allocate_dev_particles();
 	cnode *host_nodes = allocate_host_nodes();
+	//cnode *host_nodes = new cnode[block_size * shared_size];
 	cnode *dev_nodes = allocate_dev_nodes();
 	datatype3 *host_res = allocate_host_results();
+	//datatype3 *host_res = new datatype3[block_size];
 	datatype3 *dev_res = allocate_dev_results();
 	particle **pars = new particle*[block_size];
 	uint32_t num_nodes = 0;
@@ -200,6 +203,9 @@ void *barnes_hut_cuda_thread(void *data)
 	free_host_particles(host_par);
 	free_host_nodes(host_nodes);
 	free_host_results(host_res);
+	//delete[] host_par;
+	//delete[] host_nodes;
+	//delete[] host_res;
 	delete[] pars;
 	free_dev_particles(dev_par);
 	free_dev_nodes(dev_nodes);
@@ -234,5 +240,5 @@ void barnes_hut_cuda(particle_set *particles, octree *root, bool damping, dataty
 	delete[] td;
 	free_streams(streams);
 	delete[] streams;
-	//call_dev_reset();
+	call_dev_reset();
 }

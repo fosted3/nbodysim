@@ -31,6 +31,7 @@
 #include <unordered_set>
 #include <utility>
 #include "data_structures.h"
+#include <malloc.h>
 
 #ifdef CUDA
 #include "cuda_helper.h"
@@ -1301,6 +1302,8 @@ int main(int argc, char **argv)
 		if (config.verbose) { std::cout << "Deallocating nodes..." << std::endl; }
 		if (config.threads > 1) { delete_root_threaded(root); }
 		else { delete root; }
+		root = NULL;
+		malloc_trim(0);
 		if (first) //pthread_join can't be called on uninitialized value file_thread
 		{
 			first = false;
