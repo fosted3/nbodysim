@@ -1032,21 +1032,25 @@ void apply_minimum_size(datatype min_size, octree* node, particle_set *particles
 					new_par = collide(new_par, node -> get_child(i) -> get_particle());
 					if (lock != NULL) { while (!(lock -> try_lock())); }
 					itr = particles -> find(node -> get_child(prev) -> get_particle());
-					assert(itr != particles -> end());
-					particles -> erase(itr);
+					if (itr != particles -> end())
+					{
+						particles -> erase(itr);
+					}
 					if (lock != NULL) { lock -> unlock(); }
-					delete (node -> get_child(prev));
 					node -> get_child(prev) -> release_particle();
+					delete (node -> get_child(prev));
 					node -> release_child(prev);
 					if (particles_contained == 1)
 					{
 						if (lock != NULL) { while (!(lock -> try_lock())); }
 						itr = particles -> find(node -> get_child(i) -> get_particle());
-						assert(itr != particles -> end());
-						particles -> erase(itr);
+						if (itr != particles -> end())
+						{
+							particles -> erase(itr);
+						}
 						if (lock != NULL) { lock -> unlock(); }
-						delete (node -> get_child(i));
 						node -> get_child(i) -> release_particle();
+						delete (node -> get_child(i));
 						node -> release_child(i);
 						for (unsigned int j = 0; j < 8; j++)
 						{
@@ -1464,7 +1468,7 @@ int main(int argc, char **argv)
 		frame++;
 		std::cout << "Frame " << frame << "/" << config.num_frames << std::endl;
 	}
-	if (!first && (config.dump_binary || config.dump_text || config.dump_image)) //there's data to be written possibly
+	if (!first && (config.dump_binary || config.dump_text || config.dump_image) && config.threads > 1) //there's data to be written possibly
 	{
 		pthread_join(file_thread, NULL);
 	}
