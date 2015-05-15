@@ -730,21 +730,30 @@ void *dump(void *data) //Data dumping thread
 	}
 	if (binary) //Dump binary data
 	{
-		std::fstream boutfile(bfilename, std::ios::out | std::ios::binary);
+		std::ofstream boutfile(bfilename, std::ios::out | std::ios::binary);
+		assert(boutfile.is_open());
 		boutfile.seekp(0);
-		for (particle_set::iterator itr = particles -> begin(); itr != particles -> end(); itr++) { boutfile.write((char*)(*itr), size); }
+		for (particle_set::iterator itr = particles -> begin(); itr != particles -> end(); itr++)
+		{
+			boutfile.write((char*)(*itr), size);
+			assert(!boutfile.bad());
+			boutfile.clear();
+		}
 		boutfile.flush();
 		boutfile.close();
 	}
 	if (text) //Dump text data
 	{
 		vector temp;
-		std::fstream toutfile(tfilename, std::ios::out);
+		std::ofstream toutfile(tfilename, std::ios::out);
+		assert(toutfile.is_open());
 		toutfile.seekp(0);
 		for (particle_set::iterator itr = particles -> begin(); itr != particles -> end(); itr++)
 		{
 			temp = *((*itr) -> get_pos());
 			toutfile << temp.get_x() << ", " << temp.get_y() << ", " << temp.get_z() << "\n";
+			assert(!toutfile.bad());
+			toutfile.clear();
 		}
 		toutfile.flush();
 		toutfile.close();
@@ -753,29 +762,30 @@ void *dump(void *data) //Data dumping thread
 	{
 		write_image(img_w, img_h, projection, color, adaptive, nonlinear, scale, brightness, frame, particles);
 	}
+	delete args;
 	pthread_exit(NULL);
 }
 
 void dump_threaded(struct settings &config, unsigned int frame, particle_set *particles, pthread_t &file_thread) //Data dumping call
 {
-	struct file_write_data fd; //Set up args
-	fd.particles = particles;
-	fd.frame = frame;
-	fd.binary = config.dump_binary;
-	fd.text = config.dump_text;
-	fd.overwrite = config.overwrite_data;
-	fd.keep_prev_binary = config.keep_previous_binary;
-	fd.keep_prev_text = config.keep_previous_text;
-	fd.img_w = config.img_w;
-	fd.img_h = config.img_h;
-	fd.projection = config.projection;
-	fd.scale = config.scale;
-	fd.brightness = config.brightness;
-	fd.image = config.dump_image;
-	fd.color = config.color;
-	fd.adaptive = config.adaptive_brightness;
-	fd.nonlinear = config.nonlinear_brightness;
-	create_thread(&file_thread, NULL, dump, (void*) &fd); //No thread joining here, thread is defined in main function and is joined there
+	struct file_write_data *fd = new struct file_write_data; //Set up args & you better free this
+	fd -> particles = particles;
+	fd -> frame = frame;
+	fd -> binary = config.dump_binary;
+	fd -> text = config.dump_text;
+	fd -> overwrite = config.overwrite_data;
+	fd -> keep_prev_binary = config.keep_previous_binary;
+	fd -> keep_prev_text = config.keep_previous_text;
+	fd -> img_w = config.img_w;
+	fd -> img_h = config.img_h;
+	fd -> projection = config.projection;
+	fd -> scale = config.scale;
+	fd -> brightness = config.brightness;
+	fd -> image = config.dump_image;
+	fd -> color = config.color;
+	fd -> adaptive = config.adaptive_brightness;
+	fd -> nonlinear = config.nonlinear_brightness;
+	create_thread(&file_thread, NULL, dump, fd); //No thread joining here, thread is defined in main function and is joined there
 }
 
 unsigned int read_data(particle_set *particles, unsigned int num_frames) //Read data back into particles
@@ -1463,7 +1473,10 @@ int main(int argc, char **argv)
 		{
 			if (config.verbose) { std::cout << "Dumping data..." << std::endl; }
 			dump_threaded(config, frame, particles, file_thread);
-			if (config.threads == 1) { pthread_join(file_thread, NULL); }
+			if (config.threads == 1)
+			{
+				pthread_join(file_thread, NULL);
+			}
 		}
 		frame++;
 		std::cout << "Frame " << frame << "/" << config.num_frames << std::endl;
