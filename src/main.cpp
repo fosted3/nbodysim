@@ -33,10 +33,7 @@
 #include "data_structures.h"
 #include <malloc.h>
 #include <mutex>
-
-#ifdef CUDA
 #include "cuda_helper.h"
-#endif
 
 #ifdef DOUBLE
 #ifndef datatype
@@ -131,6 +128,7 @@ struct settings
 	bool adaptive_brightness;	//Adaptive brightness
 	bool nonlinear_brightness;	//Nonlinear brightness
 	bool collide;				//Calculate collisions
+	bool cuda;				//Use CUDA
 	unsigned int num_particles; //How many particles to generate if no resume present
 	unsigned int num_frames;	//How many frames to compute
 	unsigned int threads;		//How many threads to use for Barnes-Hut calculation
@@ -492,7 +490,6 @@ void barnes_hut_threaded(struct settings &config, particle_set *particles, octre
 			{
 				a = first_find -> second;
 				first_find = update_table.find(a);
-			
 			}
 			while (second_find != update_table.end())
 			{
@@ -1215,6 +1212,12 @@ void read_settings(settings &s, const char* sfile) //Read config file
 				if (var.compare("true") == 0) { s.collide = true; }
 				else { s.collide = false; }
 			}
+			else if (var.compare("cuda") == 0)
+			{
+				cfg >> var;
+				if (var.compare("true") == 0) { s.cuda = true; }
+				else { s.cuda = false; }
+			}
 			else if (var.compare("rotation_vector") == 0)
 			{
 				datatype x;
@@ -1348,6 +1351,7 @@ void set_default(settings &s) //Set settings to default values
 	s.collide = false;
 	s.collision_range = 0.01;
 	s.min_node_size = 0.0;
+	s.cuda = false;
 }
 
 int main(int argc, char **argv)
@@ -1436,15 +1440,18 @@ int main(int argc, char **argv)
 			added = new particle_set;
 			removed = new particle_set;
 		}
-		#ifdef CUDA
-		if (config.collide)
+		if (config.collide && config.cuda)
 		{
 			std::cout << "WARNING: collision not yet supported by CUDA implementation" << std::endl;
 		}
-		barnes_hut_cuda(particles, root, config.damping, config.theta);
-		#else
-		barnes_hut_threaded(config, particles, root, added, removed);
-		#endif
+		if (config.cuda)
+		{
+			barnes_hut_cuda(particles, root, config.damping, config.theta);
+		}
+		else
+		{
+			barnes_hut_threaded(config, particles, root, added, removed);
+		}
 		if (config.verbose) { std::cout << "Deallocating nodes..." << std::endl; }
 		if (config.threads > 1) { delete_root_threaded(root); }
 		else { delete root; }
