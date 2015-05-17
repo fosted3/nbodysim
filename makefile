@@ -5,7 +5,7 @@ CUDA_CFLAGS=-c -DFLOAT -m64 -arch=compute_30 -code=sm_30
 LDFLAGS=-lpthread -lfreeimage
 CUDA_LDFLAGS=-lcuda -lcudart
 EXECUTABLE=nbodysim
-DIRS=bin/debug/ bin/release/  build/debug/ build/release/
+DIRS=bin/debug/ bin/release/  build/debug/ build/release/ data/ img/
 CUDA_INCLUDES=-I/opt/cuda/include
 
 all:
@@ -55,3 +55,10 @@ setup:
 
 clean:
 	rm -f build/debug/*.o build/release/*.o bin/debug/* bin/release/*
+
+clean_data:
+	rm -f data/* img/*
+
+test:
+	make debug
+	valgrind --leak-check=full --show-reachable=yes --read-var-info=yes --track-origins=yes ./bin/debug/nbodysim
