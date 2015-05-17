@@ -16,45 +16,42 @@ debug: CFLAGS += -g -Og
 debug: CUDA_CFLAGS += -g -G -O0
 debug: BIN_DIR=bin/debug
 debug: BUILD_DIR=build/debug
+debug: setup
 debug: $(EXECUTABLE)
 
 release: CFLAGS += -O2
 release: CUDA_CFLAGS += -O2
 release: BIN_DIR=bin/release
 release: BUILD_DIR=build/release
+release: setup
 release: $(EXECUTABLE)
 
 $(EXECUTABLE): $(BUILD_DIR)/main.o $(BUILD_DIR)/particle.o $(BUILD_DIR)/octree.o $(BUILD_DIR)/vector.o $(BUILD_DIR)/thread_functions.o $(BUILD_DIR)/cuda_code.o $(BUILD_DIR)/cuda_helper.o
-	@mkdir -p $(DIRS)
 	$(NVCC) $(BUILD_DIR)/main.o $(BUILD_DIR)/particle.o $(BUILD_DIR)/octree.o $(BUILD_DIR)/vector.o $(BUILD_DIR)/thread_functions.o $(BUILD_DIR)/cuda_code.o $(BUILD_DIR)/cuda_helper.o -o $(BIN_DIR)/$(EXECUTABLE) $(CUDA_LDFLAGS) $(LDFLAGS)
 
 $(BUILD_DIR)/main.o: src/main.cpp
-	@mkdir -p $(DIRS)
 	$(CC) $(CFLAGS) src/main.cpp -o $(BUILD_DIR)/main.o
 
 $(BUILD_DIR)/particle.o: src/particle.cpp
-	@mkdir -p $(DIRS)
 	$(CC) $(CFLAGS) src/particle.cpp -o $(BUILD_DIR)/particle.o
 
 $(BUILD_DIR)/octree.o: src/octree.cpp
-	@mkdir -p $(DIRS)
 	$(CC) $(CFLAGS) src/octree.cpp -o $(BUILD_DIR)/octree.o
 
 $(BUILD_DIR)/vector.o: src/vector.cpp
-	@mkdir -p $(DIRS)
 	$(CC) $(CFLAGS) src/vector.cpp -o $(BUILD_DIR)/vector.o
 
 $(BUILD_DIR)/thread_functions.o: src/thread_functions.cpp
-	@mkdir -p $(DIRS)
 	$(CC) $(CFLAGS) src/thread_functions.cpp -o $(BUILD_DIR)/thread_functions.o
 
 $(BUILD_DIR)/cuda_code.o: src/cuda_code.cu
-	@mkdir -p $(DIRS)
 	$(NVCC) $(CUDA_CFLAGS) src/cuda_code.cu -o $(BUILD_DIR)/cuda_code.o $(CUDA_INCLUDES)
 
 $(BUILD_DIR)/cuda_helper.o: src/cuda_helper.cpp
-	@mkdir -p $(DIRS)
 	$(CC) $(CFLAGS) src/cuda_helper.cpp -o $(BUILD_DIR)/cuda_helper.o $(CUDA_INCLUDES)
+
+setup:
+	mkdir -p $(DIRS)
 
 clean:
 	rm -f build/debug/*.o build/release/*.o bin/debug/* bin/release/*
