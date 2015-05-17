@@ -20,7 +20,7 @@ release: $(EXECUTABLE)
 
 $(EXECUTABLE): build/main.o build/particle.o build/octree.o build/vector.o build/thread_functions.o build/cuda_code.o build/cuda_helper.o
 	@mkdir -p $(DIRS)
-	$(NVCC) build/main.o build/particle.o build/octree.o build/vector.o build/thread_functions.o -o $(EXECUTABLE) $(CUDA_LDFLAGS) $(LDFLAGS)
+	$(NVCC) build/main.o build/particle.o build/octree.o build/vector.o build/thread_functions.o build/cuda_code.o build/cuda_helper.o -o $(EXECUTABLE) $(CUDA_LDFLAGS) $(LDFLAGS)
 
 build/main.o: src/main.cpp
 	@mkdir -p $(DIRS)
