@@ -1,12 +1,13 @@
 nbodysim
 ========
-Run setup_dirs.sh on initial pull, this creates a few directories that the makefile / binary expects.
 
-clean_dirs removes all binary data, text data, and image data (everything inside data/ and img/).
+make (all) will build debug and release targets. make debug and make release will build their respective targets.
 
-render_video expects an output file as the only argument. I use mkv, though it should work fine with other formats.
+make test will build the debug target and run it through valgrind.
 
-test uses valgrind to ensure there's no memory leaks, etc. you can pass -v to it (it only supports one additional arg at the moment).
+make clean_data will remove *all* files in data/ and img/
+
+render_video.sh expects an output file as the only argument. I use mkv, though it should work fine with other formats.
 
 Config file information:
   nbodysim expects a config file to be passed as the first arg. If it isn't given one, it will look for settings.cfg. If it doesn't find that, it will complain.
