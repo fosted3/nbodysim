@@ -59,6 +59,5 @@ clean:
 clean_data:
 	rm -f data/* img/*
 
-test:
-	make debug
+test: debug
 	valgrind --leak-check=full --show-reachable=yes --read-var-info=yes --track-origins=yes ./bin/debug/nbodysim
