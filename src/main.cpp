@@ -277,7 +277,7 @@ void generate_particle(settings &s, particle_set *particles, std::default_random
 bool file_exists(const char *filename) //Check if a file exists
 {
 	std::ifstream ifile(filename);
-	return ifile;
+	return ifile.good();
 }
 
 std::string gen_filename(unsigned int frame, bool binary) //Generate text / binary filename
@@ -361,7 +361,9 @@ void *barnes_hut_thread(void *data) //Thread that calculates Barnes-Hut algorith
 			completed += 25 * (args -> modulus);
 			percent = completed * 100;
 			percent /= args ->  num_particles;
-			printf("\b\b\b\b\b\b\b%3.2f%%", percent);
+			if (completed == 25 * (args -> modulus)) { printf("%06.2f%%", percent); }
+			else { printf("\b\b\b\b\b\b\b%06.2f%%", percent); }
+			
 		}
 		curr = *itr;
 		curr -> set_acc_zero();
@@ -454,7 +456,7 @@ void barnes_hut_threaded(struct settings &config, particle_set *particles, octre
 		pthread_join(threads[i], NULL);
 		if (config.display_progress && i == 0) //Get rid of that last print statement
 		{
-			printf("\b\b\b\b\b\b\b\b");
+			printf("\b\b\b\b\b\b\b");
 		}
 		if (added != NULL && removed != NULL)
 		{
