@@ -87,7 +87,9 @@ void *barnes_hut_cuda_thread(void *data)
 			completed += 100 * (args -> modulus);
 			percent = completed * 100;
 			percent /= args ->  particles -> size();
-			printf("\b\b\b\b\b\b\b%3.2f%%", percent);
+			//percent /= args ->  num_particles;
+			if (completed == 100 * (args -> modulus)) { printf("%06.2f%%", percent); }
+			else { printf("\b\b\b\b\b\b\b%06.2f%%", percent); }
 		}
 		assert(par_loc < block_size);
 		pars[par_loc] = *particle_itr;
